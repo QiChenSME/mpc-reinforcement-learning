@@ -91,7 +91,7 @@ from mpcrl.wrappers.envs import MonitorEpisodes
 # library to do so. The most important methods are :func:`gymnasium.Env.reset` and
 # :func:`gymnasium.Env.step`, which will be called to reset the environment to its
 # initial state and to step the dynamics and receive a realization of the reward signal,
-# respectively. The environment is defined as a the following class.
+# respectively. The environment is defined as a following class.
 
 
 class LtiSystem(gym.Env[npt.NDArray[np.floating], float]):
@@ -275,7 +275,7 @@ def get_rollout_generator(
 
 if __name__ == "__main__":
     # now build the MPC and the dict of learnable parameters
-    seed = 69
+    seed = 114514
     mpc = LinearMpc()
     learnable_pars = LearnableParametersDict[cs.SX](
         (
@@ -285,6 +285,7 @@ if __name__ == "__main__":
     )
 
     # build and wrap appropriately the agent
+    # noinspection PyTypeChecker
     agent = Evaluate(
         Log(
             RecordUpdates(

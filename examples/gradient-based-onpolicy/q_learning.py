@@ -92,13 +92,13 @@ from mpcrl.wrappers.envs import MonitorEpisodes
 class LtiSystem(gym.Env[npt.NDArray[np.floating], float]):
     """A simple discrete-time LTI system affected by uniform noise."""
 
-    nx = 2  # number of states
+    nx = 4  # number of states
     nu = 1  # number of inputs
-    A = np.asarray([[0.9, 0.35], [0, 1.1]])  # state-space matrix A
-    B = np.asarray([[0.0813], [0.2]])  # state-space matrix B
-    x_bnd = (np.asarray([[0], [-1]]), np.asarray([[1], [1]]))  # bounds of state
-    a_bnd = (-1, 1)  # bounds of control input
-    w = np.asarray([[1e2], [1e2]])  # penalty weight for bound violations
+    A = np.asarray([[0, 1, 0, 0], [0, 0, -0.5, 0], [0, 0, 0, 1], [0, 0, 20, 0]])  # state-space matrix A
+    B = np.asarray([[0], [1], [0], [-2]])  # state-space matrix B
+    x_bnd = (np.asarray([[-5], [-5], [-5], [-5]]), np.asarray([[5], [5], [5], [5]]))  # bounds of state
+    a_bnd = (-20, 20)  # bounds of control input
+    w = np.asarray([[1e2], [1e2], [1e2], [1e2]])  # penalty weight for bound violations
     e_bnd = (-1e-1, 0)  # uniform noise bounds
     action_space = Box(*a_bnd, (nu,), np.float64)
 
@@ -110,7 +110,7 @@ class LtiSystem(gym.Env[npt.NDArray[np.floating], float]):
     ) -> tuple[npt.NDArray[np.floating], dict[str, Any]]:
         """Resets the state of the LTI system."""
         super().reset(seed=seed, options=options)
-        self.x = np.asarray([0, 0.15]).reshape(self.nx, 1)
+        self.x = np.asarray([0, 0.15, 0, 0]).reshape(self.nx, 1)
         return self.x, {}
 
     def get_stage_cost(self, state: npt.NDArray[np.floating], action: float) -> float:
@@ -153,12 +153,12 @@ class LinearMpc(Mpc[cs.SX]):
     discount_factor = 0.9
     learnable_pars_init = {
         "V0": np.asarray(0.0),
-        "x_lb": np.asarray([0, 0]),
-        "x_ub": np.asarray([1, 0]),
+        "x_lb": np.asarray([0, 0, 0, 0]),
+        "x_ub": np.asarray([1, 0, 0, 0]),
         "b": np.zeros(LtiSystem.nx),
         "f": np.zeros(LtiSystem.nx + LtiSystem.nu),
-        "A": np.asarray([[1, 0.25], [0, 1]]),
-        "B": np.asarray([[0.0312], [0.25]]),
+        "A": np.asarray([[0, 1, 0, 0], [0, 0, -0.5, 0], [0, 0, 0, 1], [0, 0, 20, 0]]),
+        "B": np.asarray([[0], [1], [0], [-2]]),
     }
 
     def __init__(self) -> None:
@@ -255,6 +255,7 @@ if __name__ == "__main__":
     )
 
     # build and wrap appropriately the agent
+    # noinspection PyTypeChecker
     agent = Log(
         RecordUpdates(
             LstdQLearningAgent(
@@ -262,7 +263,7 @@ if __name__ == "__main__":
                 learnable_parameters=learnable_pars,
                 discount_factor=mpc.discount_factor,
                 update_strategy=1,
-                optimizer=NetwonMethod(learning_rate=5e-2),
+                optimizer=NetwonMethod(learning_rate=9e-2),
                 hessian_type="approx",
                 record_td_errors=True,
                 remove_bounds_on_initial_action=True,
