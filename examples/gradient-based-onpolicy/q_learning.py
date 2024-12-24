@@ -113,7 +113,9 @@ class LtiSystem(gym.Env[npt.NDArray[np.floating], float]):
         self.x = np.asarray([0, 0.15, 0, 0]).reshape(self.nx, 1)
         return self.x, {}
 
+    # noinspection DuplicatedCode
     def get_stage_cost(self, state: npt.NDArray[np.floating], action: float) -> float:
+        # noinspection DuplicatedCode
         """Computes the stage cost :math:`L(s,a)`."""
         lb, ub = self.x_bnd
         return (
@@ -126,9 +128,11 @@ class LtiSystem(gym.Env[npt.NDArray[np.floating], float]):
             ).item()
         )
 
+    # noinspection DuplicatedCode
     def step(
         self, action: cs.DM
     ) -> tuple[npt.NDArray[np.floating], float, bool, bool, dict[str, Any]]:
+        # noinspection DuplicatedCode
         """Steps the LTI system."""
         action = float(action)
         x_new = self.A @ self.x + self.B * action
@@ -274,6 +278,7 @@ if __name__ == "__main__":
     )
 
     # launch the training simulation
+    # noinspection DuplicatedCode
     agent.train(env=env, episodes=1, seed=69)
 
     # plot the results
