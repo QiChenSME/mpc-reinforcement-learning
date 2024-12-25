@@ -63,7 +63,7 @@ class MassBlockEnv(gym.Env[npt.NDArray[np.floating], float]):
         x, x_dot = self.state
         force = float(action)
 
-        x_new = self.A @ x + self.B * force
+        x_new = self.A @ np.asarray(([x, x_dot]), dtype=np.float64).reshape(self.nx,1) + self.B * force
 
         self.state = np.array(x_new, dtype=np.float64)
 
