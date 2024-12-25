@@ -1,6 +1,7 @@
 import numpy as np
 
 from CustomEnv.customtest import MassBlockEnv
+from project.original_sample import LtiSystem
 import matplotlib.pyplot as plt
 
 if __name__ == '__main__':
