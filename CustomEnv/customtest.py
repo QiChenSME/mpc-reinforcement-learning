@@ -12,6 +12,7 @@ from gymnasium.error import DependencyNotInstalled
 from gymnasium.vector import VectorEnv
 from gymnasium.vector.utils import batch_space
 
+
 class MassBlockEnv(gym.Env[npt.NDArray[np.floating], float]):
 
     nx = 2
@@ -55,6 +56,8 @@ class MassBlockEnv(gym.Env[npt.NDArray[np.floating], float]):
 
         self.steps_beyond_terminated = None
 
+        # self.
+
     def step(self, action:cs.DM):
         force = np.float32(action)
         # assert self.action_space.contains(
@@ -81,7 +84,7 @@ class MassBlockEnv(gym.Env[npt.NDArray[np.floating], float]):
             0.5
             * (
                 np.square(x_new).sum()
-                + 0.5 * action**2
+                + 0.2 * action**2
                 + self.w.T @ np.maximum(0, lb - x_new)
                 + self.w.T @ np.maximum(0, x_new - ub)
             )
@@ -119,10 +122,21 @@ class MassBlockEnv(gym.Env[npt.NDArray[np.floating], float]):
             options, -8, 8  # default low
         )  # default high
         self.state = self.np_random.uniform(low=low, high=high, size=(2, 1))
+        # self.state = np.array([[6.0],[4.0]])
         self.steps_beyond_terminated = None
 
         if self.render_mode == "human":
             self.render()
         return np.array(self.state, dtype=np.float32), {}
+
+    def render(self):
+        if self.render_mode == "human":
+            pass
+        if self.render_mode == "rgb_array":
+            pass
+        if self.render_mode == "plots":
+            import matplotlib.pyplot as plt
+
+
 
 

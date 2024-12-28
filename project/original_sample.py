@@ -110,7 +110,7 @@ class LtiSystem(gym.Env[npt.NDArray[np.floating], float]):
     ) -> tuple[npt.NDArray[np.floating], dict[str, Any]]:
         """Resets the state of the LTI system."""
         super().reset(seed=seed, options=options)
-        self.x = np.asarray([0, 0.15]).reshape(self.nx, 1)
+        self.x = np.asarray([np.random.rand(), np.random.rand()]).reshape(self.nx, 1)
         return self.x, {}
 
     def get_stage_cost(self, state: npt.NDArray[np.floating], action: float) -> float:
@@ -244,7 +244,7 @@ class LinearMpc(Mpc[cs.SX]):
 
 if __name__ == "__main__":
     # instantiate the env and wrap it
-    env = MonitorEpisodes(TimeLimit(LtiSystem(), max_episode_steps=1_0000))
+    env = MonitorEpisodes(TimeLimit(LtiSystem(), max_episode_steps=1_000))
 
     # now build the MPC and the dict of learnable parameters
     mpc = LinearMpc()
@@ -275,7 +275,7 @@ if __name__ == "__main__":
     )
 
     # launch the training simulation
-    agent.train(env=env, episodes=1, seed=69)
+    agent.train(env=env, episodes=10, seed=69)
 
     # plot the results
     import matplotlib.pyplot as plt

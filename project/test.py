@@ -91,7 +91,7 @@ class LinearMpc(Mpc[cs.SX]):
 
 if __name__ == "__main__":
     # instantiate the env and wrap it
-    env = MonitorEpisodes(TimeLimit(MassBlockEnv(), max_episode_steps=1_0000))
+    env = MonitorEpisodes(TimeLimit(MassBlockEnv(), max_episode_steps=2_00))
 
     # now build the MPC and the dict of learnable parameters
     mpc = LinearMpc()
@@ -122,7 +122,7 @@ if __name__ == "__main__":
     )
 
     # launch the training simulation
-    agent.train(env=env, episodes=1, seed=69)
+    agent.train(env=env, episodes=100, seed=69)
 
     # plot the results
     import matplotlib.pyplot as plt
