@@ -19,7 +19,7 @@ class MassBlockEnv(gym.Env[npt.NDArray[np.floating], float]):
     nu = 1
     x_threshold = 10
     x_dot_threshold = 10
-    action_threshold = 10
+    action_threshold = 20
     x_bnd = (np.asarray([[-x_threshold], [-x_dot_threshold]]), np.asarray([[x_threshold], [x_dot_threshold]]))
     a_bnd = (-action_threshold, action_threshold)
 

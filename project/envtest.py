@@ -1,7 +1,8 @@
 import numpy as np
+import gymnasium as gym
 
 from CustomEnv.customtest import MassBlockEnv
-from project.original_sample import LtiSystem
+from CustomEnv.CartpoleProMax import CartPoleV3
 import matplotlib.pyplot as plt
 
 if __name__ == '__main__':
@@ -9,21 +10,37 @@ if __name__ == '__main__':
     act_data = []
     x_datas = []
     x_dot_datas = []
+    theta_datas = []
+    theta_dot_datas = []
 
-    env = MassBlockEnv()
+    env = CartPoleV3(render_mode='human')
+    # env = gym.make('CartPole-v1', render_mode='human')+
     env.reset()
 
     for i in range(steps):
         action = env.action_space.sample()
         action1 = np.array([1],dtype=np.float32)
-        data, _, _, _, _= env.step(action1)
-        act_data.append(action1)
+        a = action
+
+        data, _, _, _, _= env.step(a)
+
+        act_data.append(a)
         x_datas.append(data[0])
         x_dot_datas.append(data[1])
+        theta_datas.append(data[2])
+        theta_dot_datas.append(data[3])
 
     plt.plot(act_data, label="action")
-    plt.plot(x_datas, label="x")
-    plt.plot(x_dot_datas, label="xdot")
-    plt.legend(loc="best")
+    _, axs = plt.subplots(2, 1, constrained_layout=True, sharex=True)
+    axs[0].plot(x_datas)
+    axs[1].plot(x_dot_datas)
+    axs[0].set_ylabel("$X$")
+    axs[1].set_ylabel("$X'$")
+    _, axs = plt.subplots(2, 1, constrained_layout=True, sharex=True)
+    axs[0].plot(theta_datas)
+    axs[1].plot(theta_dot_datas)
+    axs[0].set_ylabel(r"$\theta$")
+    axs[1].set_ylabel(r"$\theta'$")
+    # plt.legend(loc="best")
 
     plt.show()

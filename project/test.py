@@ -118,18 +118,19 @@ if __name__ == "__main__":
             )
         ),
         level=logging.DEBUG,
-        log_frequencies={"on_timestep_end": 1000},
+        log_frequencies={"on_timestep_end": 200},
     )
 
     # launch the training simulation
-    agent.train(env=env, episodes=100, seed=69)
+    agent.train(env=env, episodes=10, seed=69)
 
     # plot the results
     import matplotlib.pyplot as plt
 
-    X = env.get_wrapper_attr("observations")[0].squeeze().T
-    U = env.get_wrapper_attr("actions")[0].squeeze()
-    R = env.get_wrapper_attr("rewards")[0]
+    X = env.get_wrapper_attr("observations")[-1].squeeze().T
+    U = env.get_wrapper_attr("actions")[-1].squeeze()
+    R = env.get_wrapper_attr("rewards")[-1]
+    print(len(R))
     _, axs = plt.subplots(3, 1, constrained_layout=True, sharex=True)
     axs[0].plot(X[0])
     axs[1].plot(X[1])
@@ -143,7 +144,7 @@ if __name__ == "__main__":
     axs[2].set_ylabel("$a$")
 
     _, axs = plt.subplots(2, 1, constrained_layout=True, sharex=True)
-    axs[0].plot(agent.td_errors, "o", markersize=1)
+    axs[0].plot(agent.td_errors[-len(R):-1], "o", markersize=1)
     axs[1].semilogy(R, "o", markersize=1)
     axs[0].set_ylabel(r"$\tau$")
     axs[1].set_ylabel("$L$")
