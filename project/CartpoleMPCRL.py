@@ -137,7 +137,7 @@ if __name__ == "__main__":
     )
 
     # launch the training simulation
-    agent.train(env=env, episodes=100, seed=69)
+    agent.train(env=env, episodes=40, seed=69)
 
     import matplotlib.pyplot as plt
 

@@ -151,7 +151,7 @@ class CartPoleV3(gym.Env):
             reward = float(
                 0.5
                 * (
-                    0*x_dot**2 + 0*x**2 + 100*theta**3 + 0*theta_dot**2
+                    0*x_dot**2 + 0*x**2 + 10*theta**3 + 0*theta_dot**2
                     + 0 * action ** 2
                     # + self.w.T @ np.maximum(0, lb - self.state)
                     # + self.w.T @ np.maximum(0, self.state - ub)
@@ -161,7 +161,7 @@ class CartPoleV3(gym.Env):
         elif self.steps_beyond_terminated is None:
             # Pole just fell!
             self.steps_beyond_terminated = 0
-            reward = 10000# - 100 * self.time_step
+            reward = 16000 - 20 * self.time_step
         # 终止判定后仍调用step则抛出警告
         else:
             if self.steps_beyond_terminated == 0:
