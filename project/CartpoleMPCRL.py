@@ -1,9 +1,13 @@
 import logging
+from typing import Any, Optional
 
 import casadi as cs
+import gymnasium as gym
 import numpy as np
+import numpy.typing as npt
 from csnlp import Nlp
 from csnlp.wrappers import Mpc
+from gymnasium.spaces import Box
 from gymnasium.wrappers import TimeLimit
 
 from mpcrl import LearnableParameter, LearnableParametersDict, LstdQLearningAgent
@@ -12,30 +16,45 @@ from mpcrl.util.control import dlqr
 from mpcrl.wrappers.agents import Log, RecordUpdates
 from mpcrl.wrappers.envs import MonitorEpisodes
 
-from CustomEnv.customtest import MassBlockEnv
+from CustomEnv.CartpoleProMax import CartPoleV3
 
 
 class LinearMpc(Mpc[cs.SX]):
     """A simple linear MPC controller."""
+    env = CartPoleV3()
 
     horizon = 10
     discount_factor = 0.9
+    M = env.masscart
+    m = env.masspole
+    g = env.gravity
+    l = env.length
+    Ts = env.tau
+
+    C = M * m * l**2
+
     learnable_pars_init = {
         "V0": np.asarray(0.0),
-        "x_lb": np.asarray([-10, -10]),
-        "x_ub": np.asarray([10, 10]),
-        "b": np.zeros(MassBlockEnv.nx),
-        "f": np.zeros(MassBlockEnv.nx + MassBlockEnv.nu),
-        "A": np.asarray([[1, 0.25], [0, 1]]),
-        "B": np.asarray([[0.0312], [0.25]]),
+        "x_lb": np.asarray(env.x_bnd[0]).reshape(4, ),
+        "x_ub": np.asarray(env.x_bnd[1]).reshape(4, ),
+        "b": np.zeros(env.nx),
+        "f": np.zeros(env.nx + env.nu),
+        "A": np.asarray([[1, 1, 0, 0],
+                         [0, 1, (- m**3 * l**4 * g * (M+m) + m**4 * g**2 * l**4)/C, 0],
+                         [0, 0, 1, 1],
+                         [0, 0, (M+m)*m*g*l, 1]]) * Ts / C,
+        "B": np.asarray([[0],
+                         [m * l**2],
+                         [0],
+                         [-m * l]]) * Ts / C,
     }
 
     def __init__(self) -> None:
         N = self.horizon
         gamma = self.discount_factor
-        w = MassBlockEnv.w
-        nx, nu = MassBlockEnv.nx, MassBlockEnv.nu
-        x_bnd, a_bnd = MassBlockEnv.x_bnd, MassBlockEnv.a_bnd
+        w = self.env.w
+        nx, nu = self.env.nx, self.env.nu
+        x_bnd, a_bnd = self.env.x_bnd, self.env.a_bnd
         nlp = Nlp[cs.SX]()
         super().__init__(nlp, N)
 
@@ -85,10 +104,10 @@ class LinearMpc(Mpc[cs.SX]):
         }
         self.init_solver(opts, solver="fatrop", type="nlp")
 
+
 if __name__ == "__main__":
     # instantiate the env and wrap it
-    env = MonitorEpisodes(TimeLimit(MassBlockEnv(), max_episode_steps=2_00))
-
+    env = MonitorEpisodes(TimeLimit(CartPoleV3(), max_episode_steps=2_00))
     # now build the MPC and the dict of learnable parameters
     mpc = LinearMpc()
     learnable_pars = LearnableParametersDict[cs.SX](
@@ -118,26 +137,29 @@ if __name__ == "__main__":
     )
 
     # launch the training simulation
-    agent.train(env=env, episodes=10, seed=69)
+    agent.train(env=env, episodes=100, seed=69)
 
-    # plot the results
     import matplotlib.pyplot as plt
 
     X = env.get_wrapper_attr("observations")[-1].squeeze().T
     U = env.get_wrapper_attr("actions")[-1].squeeze()
     R = env.get_wrapper_attr("rewards")[-1]
-    print(len(R))
-    _, axs = plt.subplots(3, 1, constrained_layout=True, sharex=True)
+
+    _, axs = plt.subplots(5, 1, constrained_layout=True, sharex=True)
     axs[0].plot(X[0])
     axs[1].plot(X[1])
-    axs[2].plot(U)
+    axs[2].plot(X[2])
+    axs[3].plot(X[3])
+    axs[4].plot(U)
     for i in range(2):
-        axs[0].axhline(env.get_wrapper_attr("x_bnd")[i][0], color="r")
-        axs[1].axhline(env.get_wrapper_attr("x_bnd")[i][1], color="r")
-        axs[2].axhline(env.get_wrapper_attr("a_bnd")[i], color="r")
-    axs[0].set_ylabel("$s_1$")
-    axs[1].set_ylabel("$s_2$")
-    axs[2].set_ylabel("$a$")
+        # axs[0].axhline(env.get_wrapper_attr("x_bnd")[i][0], color="r")
+        axs[2].axhline(env.get_wrapper_attr("x_bnd")[i][2], color="r")
+        # axs[4].axhline(env.get_wrapper_attr("a_bnd")[i], color="r")
+    axs[0].set_ylabel("$X$")
+    axs[1].set_ylabel("$X'$")
+    axs[2].set_ylabel(r"$\theta$")
+    axs[3].set_ylabel(r"$\theta'$")
+    axs[4].set_ylabel("$a$")
 
     _, axs = plt.subplots(2, 1, constrained_layout=True, sharex=True)
     axs[0].plot(agent.td_errors[-len(R):-1], "o", markersize=1)
@@ -154,7 +176,7 @@ if __name__ == "__main__":
     )
     axs[1, 0].plot(np.asarray(agent.updates_history["f"]))
     axs[1, 1].plot(np.asarray(agent.updates_history["V0"]))
-    axs[2, 0].plot(np.asarray(agent.updates_history["A"]).reshape(-1, 4))
+    axs[2, 0].plot(np.asarray(agent.updates_history["A"]).reshape(-1,16))
     axs[2, 1].plot(np.asarray(agent.updates_history["B"]).squeeze())
     axs[0, 0].set_ylabel("$b$")
     axs[0, 1].set_ylabel("$x_1$")
@@ -163,12 +185,3 @@ if __name__ == "__main__":
     axs[2, 0].set_ylabel("$A$")
     axs[2, 1].set_ylabel("$B$")
     plt.show()
-
-    print("b:", agent.updates_history["b"][-1])
-    print("x1:", np.stack(
-            [np.asarray(agent.updates_history[n])[:, 0] for n in ("x_lb", "x_ub")], -1
-        )[-1])
-    print("f:", agent.updates_history["f"][-1])
-    print("V0:", agent.updates_history["V0"][-1])
-    print("A:", agent.updates_history["A"][-1])
-    print("B:", agent.updates_history["B"][-1])
