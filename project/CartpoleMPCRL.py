@@ -39,10 +39,10 @@ class LinearMpc(Mpc[cs.SX]):
         "x_ub": np.asarray(env.x_bnd[1]).reshape(4, ),
         "b": np.zeros(env.nx),
         "f": np.zeros(env.nx + env.nu),
-        "A": np.asarray([[1, 1, 0, 0],
-                         [0, 1, (- m**3 * l**4 * g * (M+m) + m**4 * g**2 * l**4)/C, 0],
-                         [0, 0, 1, 1],
-                         [0, 0, (M+m)*m*g*l, 1]]) * Ts / C,
+        "A": np.eye(4) + np.asarray([[0, 1, 0, 0],
+                         [0, 0, (- m**3 * l**4 * g * (M+m) + m**4 * g**2 * l**4)/C, 0],
+                         [0, 0, 0, 1],
+                         [0, 0, (M+m)*m*g*l, 0]]) * Ts / C,
         "B": np.asarray([[0],
                          [m * l**2],
                          [0],
@@ -107,7 +107,9 @@ class LinearMpc(Mpc[cs.SX]):
 
 if __name__ == "__main__":
     # instantiate the env and wrap it
-    env = MonitorEpisodes(TimeLimit(CartPoleV3(), max_episode_steps=2_00))
+    render_mode = None
+    # render_mode = "human"
+    env = MonitorEpisodes(TimeLimit(CartPoleV3(render_mode=render_mode), max_episode_steps=5_00))
     # now build the MPC and the dict of learnable parameters
     mpc = LinearMpc()
     learnable_pars = LearnableParametersDict[cs.SX](
@@ -130,20 +132,25 @@ if __name__ == "__main__":
                 hessian_type="approx",
                 record_td_errors=True,
                 remove_bounds_on_initial_action=True,
+                use_last_action_on_fail=True,
+
             )
         ),
         level=logging.DEBUG,
-        log_frequencies={"on_timestep_end": 200},
+        log_frequencies={"on_timestep_end": 500},
     )
 
     # launch the training simulation
-    agent.train(env=env, episodes=40, seed=69)
+    agent.train(env=env, episodes=100, seed=69, raises=False)
 
     import matplotlib.pyplot as plt
 
     X = env.get_wrapper_attr("observations")[-1].squeeze().T
     U = env.get_wrapper_attr("actions")[-1].squeeze()
     R = env.get_wrapper_attr("rewards")[-1]
+    T_R = env.get_wrapper_attr("rewards")
+    RWD = list(map(sum,T_R))
+    STP = list(map(len,T_R))
 
     _, axs = plt.subplots(5, 1, constrained_layout=True, sharex=True)
     axs[0].plot(X[0])
@@ -166,6 +173,12 @@ if __name__ == "__main__":
     axs[1].semilogy(R, "o", markersize=1)
     axs[0].set_ylabel(r"$\tau$")
     axs[1].set_ylabel("$L$")
+
+    _, axs = plt.subplots(2, 1, constrained_layout=True, sharex=True)
+    axs[0].semilogy(RWD, "ro-", markersize=4)
+    axs[0].set_ylabel("$L$")
+    axs[1].plot(STP, "bo-", markersize=4)
+    axs[1].set_ylabel("steps")
 
     _, axs = plt.subplots(3, 2, constrained_layout=True, sharex=True)
     axs[0, 0].plot(np.asarray(agent.updates_history["b"]))

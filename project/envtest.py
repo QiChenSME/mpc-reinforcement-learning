@@ -2,18 +2,18 @@ import numpy as np
 import gymnasium as gym
 
 from CustomEnv.customtest import MassBlockEnv
-from CustomEnv.CartpoleProMax import CartPoleV3
+from CustomEnv.CartpoleProMax import CartPoleV3, CartPoleVectorTest
 import matplotlib.pyplot as plt
 
 if __name__ == '__main__':
-    steps = 100
+    steps = 1000
     act_data = []
     x_datas = []
     x_dot_datas = []
     theta_datas = []
     theta_dot_datas = []
 
-    env = CartPoleV3(render_mode='human')
+    env = CartPoleVectorTest(render_mode='human')
     # env = gym.make('CartPole-v1', render_mode='human')+
     env.reset()
 

@@ -2,7 +2,7 @@ from numba.core.cgutils import terminate
 
 from project.PIDController import PIDController, InputType, FeedbackMethod
 from CustomEnv.customtest import MassBlockEnv
-from CustomEnv.CartpoleProMax import CartPoleV3
+from CustomEnv.CartpoleProMax import CartPoleV3, CartPoleVectorTest
 import matplotlib.pyplot as plt
 
 if __name__ == "__main__":
@@ -14,10 +14,10 @@ if __name__ == "__main__":
     theta_dot_datas = []
 
     # env = MassBlockEnv()
-    env = CartPoleV3(render_mode='human')
+    env = CartPoleVectorTest(render_mode='human')
     env.reset()
 
-    kp = 20
+    kp = 16
     kd = 4
     controller = PIDController(kp=kp, kd=kd, input_type=InputType.DUAL, feedback_method=FeedbackMethod.Negative)
     controller.reset(env.state[2])

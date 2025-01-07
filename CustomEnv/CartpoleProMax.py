@@ -26,9 +26,9 @@ class CartPoleV3(gym.Env):
             polelength: float = 0.5,
             tau: float = 0.01,
             x_threshold: float = 5.0,
-            x_dot_threshold: float = 100,
+            x_dot_threshold: float = 20,
             theta_threshold: float = 30,
-            theta_dot_threshold: float = 100,
+            theta_dot_threshold: float = 60 * 2 * math.pi / 360,
             force_threshold: float = 100.0,
             w: np.ndarray[np.float32] = np.asarray([[1e2], [1e2], [1e2], [1e2]]),
     ):
@@ -42,7 +42,7 @@ class CartPoleV3(gym.Env):
         self.length = polelength   # half the pole's length
         self.polemass_length = self.masspole * self.length
         self.tau = tau  # seconds between state updates
-        self.kinematics_integrator = "euler"
+        self.kinematics_integrator = "semi-implicit euler"
 
         # Angle at which to fail the episode
         self.theta_threshold = theta_threshold
@@ -147,21 +147,21 @@ class CartPoleV3(gym.Env):
         )
         # 当没有终止时给予奖励（或不给予负奖励）
         if not terminated:
-            lb, ub = self.x_bnd
+            lb, ub = self.x_bnd[0]/2, self.x_bnd[1]/2
             reward = float(
                 0.5
                 * (
-                    0*x_dot**2 + 0*x**2 + 10*theta**3 + 0*theta_dot**2
-                    + 0 * action ** 2
-                    # + self.w.T @ np.maximum(0, lb - self.state)
-                    # + self.w.T @ np.maximum(0, self.state - ub)
+                    0.1*x_dot**2 + 1*x**2 + 2*theta**2 + 0.2*theta_dot**2
+                    + 0.01 * action ** 2
+                    + self.w.T @ np.maximum(0, lb - self.state)
+                    + self.w.T @ np.maximum(0, self.state - ub)
                 )
             )
         # 若达到终止且终止判定未更新，更新终止判定
         elif self.steps_beyond_terminated is None:
             # Pole just fell!
             self.steps_beyond_terminated = 0
-            reward = 16000 - 20 * self.time_step
+            reward = 100000
         # 终止判定后仍调用step则抛出警告
         else:
             if self.steps_beyond_terminated == 0:
@@ -171,7 +171,7 @@ class CartPoleV3(gym.Env):
                 )
             self.steps_beyond_terminated += 1
         # 给予零奖励
-            reward = 10000
+            reward = 100000
 
         self.time_step += 1
 
@@ -312,3 +312,45 @@ class CartPoleV3(gym.Env):
             pygame.display.quit()
             pygame.quit()
             self.isopen = False
+
+
+class CartPoleVectorTest(CartPoleV3):
+    def __init__(self, **kwargs):
+        super(CartPoleVectorTest, self).__init__(**kwargs)
+        M = self.masscart
+        m = self.masspole
+        g = self.gravity
+        l = self.length
+        Ts = self.tau
+        C = M * m * (l**2)
+        self.A = np.eye(4) + np.asarray([
+            [0, 1, 0, 0],
+            [0, 0, (- (m**3) * (l**4) * g * (M+m) + (m**4) * (g**2) * (l**4))/C, 0],
+            [0, 0, 0, 1],
+            [0, 0, (M+m)*m*g*l, 0]]) * Ts / C
+        self.B = np.asarray([
+            [0],
+            [m * (l**2)],
+            [0],
+            [-m * l]]) * Ts / C
+
+    def step(self, action):
+        force = float(action)
+        new = self.A @ self.state + self.B @ np.asarray([force]).reshape(1,1)
+        self.state = np.asarray(new).reshape(4,1)
+
+        reward = 0.0
+
+        terminated = False
+
+        if self.render_mode == "human":
+            self.render()
+
+        return np.array(self.state, dtype=np.float32), reward, terminated, False, {}
+
+    def reset(self, **kwargs):
+        super(CartPoleVectorTest, self).reset(**kwargs)
+        self.state = np.asarray([[0],[0],[np.pi/4],[0]])
+        return np.array(self.state)
+
+
