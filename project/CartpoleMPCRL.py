@@ -16,7 +16,7 @@ from mpcrl.util.control import dlqr
 from mpcrl.wrappers.agents import Log, RecordUpdates
 from mpcrl.wrappers.envs import MonitorEpisodes
 
-from CustomEnv.CartpoleProMax import CartPoleV3
+from CustomEnv.CartpoleProMax import CartPoleV3, CartPoleV4
 
 
 class LinearMpc(Mpc[cs.SX]):
@@ -109,7 +109,7 @@ if __name__ == "__main__":
     # instantiate the env and wrap it
     render_mode = None
     # render_mode = "human"
-    env = MonitorEpisodes(TimeLimit(CartPoleV3(render_mode=render_mode), max_episode_steps=5_00))
+    env = MonitorEpisodes(TimeLimit(CartPoleV4(render_mode=render_mode), max_episode_steps=5_00))
     # now build the MPC and the dict of learnable parameters
     mpc = LinearMpc()
     learnable_pars = LearnableParametersDict[cs.SX](
@@ -141,7 +141,7 @@ if __name__ == "__main__":
     )
 
     # launch the training simulation
-    agent.train(env=env, episodes=100, seed=69, raises=False)
+    agent.train(env=env, episodes=1, seed=69, raises=False)
 
     import matplotlib.pyplot as plt
 
@@ -167,18 +167,21 @@ if __name__ == "__main__":
     axs[2].set_ylabel(r"$\theta$")
     axs[3].set_ylabel(r"$\theta'$")
     axs[4].set_ylabel("$a$")
+    plt.savefig("state_last_episode.svg", format="svg")
 
     _, axs = plt.subplots(2, 1, constrained_layout=True, sharex=True)
     axs[0].plot(agent.td_errors[-len(R):-1], "o", markersize=1)
     axs[1].semilogy(R, "o", markersize=1)
     axs[0].set_ylabel(r"$\tau$")
     axs[1].set_ylabel("$L$")
+    plt.savefig("td_error_and_loss_last_episode.svg", format="svg")
 
     _, axs = plt.subplots(2, 1, constrained_layout=True, sharex=True)
     axs[0].semilogy(RWD, "ro-", markersize=4)
     axs[0].set_ylabel("$L$")
     axs[1].plot(STP, "bo-", markersize=4)
     axs[1].set_ylabel("steps")
+    plt.savefig("episodes_loss_and_steps.svg", format="svg")
 
     _, axs = plt.subplots(3, 2, constrained_layout=True, sharex=True)
     axs[0, 0].plot(np.asarray(agent.updates_history["b"]))
@@ -197,4 +200,5 @@ if __name__ == "__main__":
     axs[1, 1].set_ylabel("$V_0$")
     axs[2, 0].set_ylabel("$A$")
     axs[2, 1].set_ylabel("$B$")
+    plt.savefig("para.svg", format="svg")
     plt.show()

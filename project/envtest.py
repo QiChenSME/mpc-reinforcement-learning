@@ -2,8 +2,9 @@ import numpy as np
 import gymnasium as gym
 
 from CustomEnv.customtest import MassBlockEnv
-from CustomEnv.CartpoleProMax import CartPoleV3, CartPoleVectorTest
+from CustomEnv.CartpoleProMax import CartPoleV3, CartPoleVectorTest, CartPoleV4
 import matplotlib.pyplot as plt
+import keyboard
 
 if __name__ == '__main__':
     steps = 1000
@@ -13,12 +14,17 @@ if __name__ == '__main__':
     theta_datas = []
     theta_dot_datas = []
 
-    env = CartPoleVectorTest(render_mode='human')
+    env = CartPoleV4(render_mode='human', ignore_terminal=True)
     # env = gym.make('CartPole-v1', render_mode='human')+
     env.reset()
 
     for i in range(steps):
-        action = env.action_space.sample()
+        if keyboard.is_pressed('left'):
+            action = -10
+        elif keyboard.is_pressed('right'):
+            action = 10
+        else:
+            action = 0
         action1 = np.array([1],dtype=np.float32)
         a = action
 

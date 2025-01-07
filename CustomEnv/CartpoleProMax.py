@@ -28,11 +28,13 @@ class CartPoleV3(gym.Env):
             x_threshold: float = 5.0,
             x_dot_threshold: float = 20,
             theta_threshold: float = 30,
-            theta_dot_threshold: float = 60 * 2 * math.pi / 360,
+            theta_dot_threshold: float = 720 * 2 * math.pi / 360,
             force_threshold: float = 100.0,
             w: np.ndarray[np.float32] = np.asarray([[1e2], [1e2], [1e2], [1e2]]),
+            ignore_terminal: bool = False,
+
     ):
-        self.ignore_terminal = False
+        self.ignore_terminal = ignore_terminal
         self.time_step = 0
 
         self.gravity = gravity
@@ -84,7 +86,7 @@ class CartPoleV3(gym.Env):
         # 渲染器的相关设置
         self.render_mode = render_mode
 
-        self.screen_width = 1200
+        self.screen_width = 1600
         self.screen_height = 400
         self.screen = None
         self.clock = None
@@ -108,6 +110,15 @@ class CartPoleV3(gym.Env):
 
         # 从实例的state属性中获取环境的状态数据
         x, x_dot, theta, theta_dot = self.state
+        if x <= -self.x_threshold and force < 0:
+            force = 0
+        elif x >= self.x_threshold and force > 0:
+            force = 0
+        if x <= -self.x_threshold and x_dot < 0:
+            x_dot = 0
+        elif x >= self.x_threshold and x_dot > 0:
+            x_dot = 0
+
         costheta = np.cos(theta)
         sintheta = np.sin(theta)
         # 计算输入的实际物理量
@@ -353,4 +364,102 @@ class CartPoleVectorTest(CartPoleV3):
         self.state = np.asarray([[0],[0],[np.pi/4],[0]])
         return np.array(self.state)
 
+
+class CartPoleV4(CartPoleV3):
+    def __init__(self, **kwargs):
+        super(CartPoleV4, self).__init__(**kwargs)
+        # 定义边界数值（此处定义为正方向一侧的边界值）
+        high = np.array(
+            [
+                self.x_threshold * 2,
+                self.x_dot_threshold,
+                np.pi,
+                self.theta_dot_threshold,
+            ],
+            dtype=np.float32,
+        )
+        self.observation_space = spaces.Box(-high, high, dtype=np.float32)
+
+
+    def step(self,
+             action: cs.DM,
+             ):
+        # 检查是否reset
+        # 注意此处产生的报错，排查不能通过检查的原因
+        force = float(action)
+        # assert self.action_space.contains(
+        #     action
+        # ), f"{action!r} ({type(action)}) invalid"
+        assert self.state is not None, "Call reset before using step method."
+
+        # 从实例的state属性中获取环境的状态数据
+        x, x_dot, theta, theta_dot = self.state
+        if x <= -self.x_threshold and force < 0:
+            force = 0
+        elif x >= self.x_threshold and force > 0:
+            force = 0
+
+        costheta = np.cos(theta)
+        sintheta = np.sin(theta)
+        # 计算输入的实际物理量
+        # 中间变量
+        temp = (
+                       force + self.polemass_length * np.square(theta_dot) * sintheta
+               ) / self.total_mass
+        # 角加速度
+        thetaacc = (self.gravity * sintheta - costheta * temp) / (
+                self.length
+                * (4.0 / 3.0 - self.masspole * np.square(costheta) / self.total_mass)
+        )
+        # 加速度
+        xacc = temp - self.polemass_length * thetaacc * costheta / self.total_mass
+
+        # 更新状态
+        # 欧拉积分
+        if self.kinematics_integrator == "euler":
+            x = x + self.tau * x_dot
+            x_dot = x_dot + self.tau * xacc
+            theta = theta + self.tau * theta_dot
+            theta_dot = theta_dot + self.tau * thetaacc
+        # 半隐式欧拉积分
+        else:  # semi-implicit euler
+            x_dot = x_dot + self.tau * xacc
+            x = x + self.tau * x_dot
+            theta_dot = theta_dot + self.tau * thetaacc
+            theta = theta + self.tau * theta_dot
+
+        while theta <= -np.pi:
+            theta += 2 * np.pi
+        while theta > np.pi:
+            theta -= 2 * np.pi
+        if x <= -self.x_threshold and x_dot < 0:
+            x_dot = [0.0]
+        elif x >= self.x_threshold and x_dot > 0:
+            x_dot = [0.0]
+        x = np.clip(x, -self.x_threshold, self.x_threshold)
+        x_dot = np.clip(x_dot, -self.x_dot_threshold, self.x_dot_threshold)
+        theta_dot = np.clip(theta_dot, -self.theta_dot_threshold, self.theta_dot_threshold)
+
+        # 将更新后的状态数据放入nparray中，赋值给state属性
+        self.state = np.array((x, x_dot, theta, theta_dot), dtype=np.float64).reshape(4, 1)
+
+        lb, ub = self.x_bnd[0] / 2, self.x_bnd[1] / 2
+        reward = float(
+            0.5
+            * (
+                    0.1 * x_dot ** 2 + 1 * x ** 2 + 2 * theta ** 2 + 0.2 * theta_dot ** 2
+                    + 0.01 * action ** 2
+                    + self.w.T @ np.maximum(0, lb - self.state)
+                    + self.w.T @ np.maximum(0, self.state - ub)
+            )
+        )
+
+        self.time_step += 1
+
+        # 判断是否渲染
+        if self.render_mode == "human":
+            self.render()
+
+        # truncation=False as the time limit is handled by the `TimeLimit` wrapper added during `make`
+        return np.array(self.state, dtype=np.float32), reward, False, False, {}
 
