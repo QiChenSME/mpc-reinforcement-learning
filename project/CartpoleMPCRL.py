@@ -144,6 +144,10 @@ if __name__ == "__main__":
     agent.train(env=env, episodes=1, seed=69, raises=False)
 
     import matplotlib.pyplot as plt
+    import os
+
+    img_path = "images"
+    os.makedirs(img_path, exist_ok=True)
 
     X = env.get_wrapper_attr("observations")[-1].squeeze().T
     U = env.get_wrapper_attr("actions")[-1].squeeze()
@@ -167,21 +171,30 @@ if __name__ == "__main__":
     axs[2].set_ylabel(r"$\theta$")
     axs[3].set_ylabel(r"$\theta'$")
     axs[4].set_ylabel("$a$")
-    plt.savefig("state_last_episode.svg", format="svg")
+
+    img_name = "state_last_episode.svg"
+    path = os.path.join(img_path, img_name)
+    plt.savefig(path, format="svg")
 
     _, axs = plt.subplots(2, 1, constrained_layout=True, sharex=True)
     axs[0].plot(agent.td_errors[-len(R):-1], "o", markersize=1)
     axs[1].semilogy(R, "o", markersize=1)
     axs[0].set_ylabel(r"$\tau$")
     axs[1].set_ylabel("$L$")
-    plt.savefig("td_error_and_loss_last_episode.svg", format="svg")
+
+    img_name = "td_error_and_loss_last_episode.svg"
+    path = os.path.join(img_path, img_name)
+    plt.savefig(path, format="svg")
 
     _, axs = plt.subplots(2, 1, constrained_layout=True, sharex=True)
     axs[0].semilogy(RWD, "ro-", markersize=4)
     axs[0].set_ylabel("$L$")
     axs[1].plot(STP, "bo-", markersize=4)
     axs[1].set_ylabel("steps")
-    plt.savefig("episodes_loss_and_steps.svg", format="svg")
+
+    img_name = "episodes_loss_and_steps.svg"
+    path = os.path.join(img_path, img_name)
+    plt.savefig(path, format="svg")
 
     _, axs = plt.subplots(3, 2, constrained_layout=True, sharex=True)
     axs[0, 0].plot(np.asarray(agent.updates_history["b"]))
@@ -200,5 +213,9 @@ if __name__ == "__main__":
     axs[1, 1].set_ylabel("$V_0$")
     axs[2, 0].set_ylabel("$A$")
     axs[2, 1].set_ylabel("$B$")
-    plt.savefig("para.svg", format="svg")
+
+    img_name = "para.svg"
+    path = os.path.join(img_path, img_name)
+    plt.savefig(path, format="svg")
+
     plt.show()
