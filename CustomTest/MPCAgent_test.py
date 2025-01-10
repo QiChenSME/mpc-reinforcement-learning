@@ -17,6 +17,7 @@ from mpcrl.wrappers.agents import Log, RecordUpdates
 from mpcrl.wrappers.envs import MonitorEpisodes
 
 from CustomEnv.CartpoleProMax import CartPoleV3, CartPoleV4
+from CustomAgent.MPCAgent import MPCAgent
 
 
 class LinearMpc(Mpc[cs.SX]):
@@ -24,7 +25,7 @@ class LinearMpc(Mpc[cs.SX]):
     env = CartPoleV3()
 
     horizon = 10
-    discount_factor = 0.6
+    discount_factor = 0.9
     M = env.masscart
     m = env.masspole
     g = env.gravity
@@ -107,8 +108,7 @@ class LinearMpc(Mpc[cs.SX]):
 
 if __name__ == "__main__":
     # instantiate the env and wrap it
-    render_mode = None
-    # render_mode = "human"
+    render_mode = "human"
     env = MonitorEpisodes(TimeLimit(CartPoleV4(render_mode=render_mode), max_episode_steps=5_00))
     # now build the MPC and the dict of learnable parameters
     mpc = LinearMpc()
@@ -121,101 +121,47 @@ if __name__ == "__main__":
 
     # build and wrap appropriately the agent
     # noinspection PyTypeChecker
-    agent = Log(
-        RecordUpdates(
-            LstdQLearningAgent(
+    agent = MPCAgent(
                 mpc=mpc,
-                learnable_parameters=learnable_pars,
-                discount_factor=mpc.discount_factor,
-                update_strategy=100,
-                optimizer=NetwonMethod(learning_rate=5e-2),
-                hessian_type="approx",
-                record_td_errors=True,
                 remove_bounds_on_initial_action=True,
                 use_last_action_on_fail=True,
-
             )
-        ),
-        level=logging.DEBUG,
-        log_frequencies={"on_timestep_end": 500},
-    )
 
     # launch the training simulation
-    agent.train(env=env, episodes=1000, seed=69, raises=False)
+    agent.run(env=env, seed=69, raises=False)
 
-    import matplotlib.pyplot as plt
-    import os
+    # import matplotlib.pyplot as plt
+    # import os
+    #
+    # img_path = "figures"
+    # os.makedirs(img_path, exist_ok=True)
+    #
+    # X = env.get_wrapper_attr("observations")[-1].squeeze().T
+    # U = env.get_wrapper_attr("actions")[-1].squeeze()
+    # R = env.get_wrapper_attr("rewards")[-1]
+    # T_R = env.get_wrapper_attr("rewards")
+    # RWD = list(map(sum,T_R))
+    # STP = list(map(len,T_R))
+    #
+    # _, axs = plt.subplots(5, 1, constrained_layout=True, sharex=True)
+    # axs[0].plot(X[0])
+    # axs[1].plot(X[1])
+    # axs[2].plot(X[2])
+    # axs[3].plot(X[3])
+    # axs[4].plot(U)
+    # for i in range(2):
+    #     # axs[0].axhline(env.get_wrapper_attr("x_bnd")[i][0], color="r")
+    #     axs[2].axhline(env.get_wrapper_attr("x_bnd")[i][2], color="r")
+    #     # axs[4].axhline(env.get_wrapper_attr("a_bnd")[i], color="r")
+    # axs[0].set_ylabel("$X$")
+    # axs[1].set_ylabel("$X'$")
+    # axs[2].set_ylabel(r"$\theta$")
+    # axs[3].set_ylabel(r"$\theta'$")
+    # axs[4].set_ylabel("$a$")
+    #
+    # img_name = "state_last_episode.svg"
+    # path = os.path.join(img_path, img_name)
+    # plt.savefig(path, format="svg")
+    #
+    # plt.show()
 
-    img_path = "images"
-    os.makedirs(img_path, exist_ok=True)
-
-    X = env.get_wrapper_attr("observations")[-1].squeeze().T
-    U = env.get_wrapper_attr("actions")[-1].squeeze()
-    R = env.get_wrapper_attr("rewards")[-1]
-    T_R = env.get_wrapper_attr("rewards")
-    RWD = list(map(sum,T_R))
-    STP = list(map(len,T_R))
-
-    _, axs = plt.subplots(5, 1, constrained_layout=True, sharex=True)
-    axs[0].plot(X[0])
-    axs[1].plot(X[1])
-    axs[2].plot(X[2])
-    axs[3].plot(X[3])
-    axs[4].plot(U)
-    for i in range(2):
-        # axs[0].axhline(env.get_wrapper_attr("x_bnd")[i][0], color="r")
-        axs[2].axhline(env.get_wrapper_attr("x_bnd")[i][2], color="r")
-        # axs[4].axhline(env.get_wrapper_attr("a_bnd")[i], color="r")
-    axs[0].set_ylabel("$X$")
-    axs[1].set_ylabel("$X'$")
-    axs[2].set_ylabel(r"$\theta$")
-    axs[3].set_ylabel(r"$\theta'$")
-    axs[4].set_ylabel("$a$")
-
-    img_name = "state_last_episode.svg"
-    path = os.path.join(img_path, img_name)
-    plt.savefig(path, format="svg")
-
-    _, axs = plt.subplots(2, 1, constrained_layout=True, sharex=True)
-    axs[0].plot(agent.td_errors[-len(R):-1], "o", markersize=1)
-    axs[1].semilogy(R, "o", markersize=1)
-    axs[0].set_ylabel(r"$\tau$")
-    axs[1].set_ylabel("$L$")
-
-    img_name = "td_error_and_loss_last_episode.svg"
-    path = os.path.join(img_path, img_name)
-    plt.savefig(path, format="svg")
-
-    _, axs = plt.subplots(2, 1, constrained_layout=True, sharex=True)
-    axs[0].semilogy(RWD, "ro-", markersize=4)
-    axs[0].set_ylabel("$L$")
-    axs[1].plot(STP, "bo-", markersize=4)
-    axs[1].set_ylabel("steps")
-
-    img_name = "episodes_loss_and_steps.svg"
-    path = os.path.join(img_path, img_name)
-    plt.savefig(path, format="svg")
-
-    _, axs = plt.subplots(3, 2, constrained_layout=True, sharex=True)
-    axs[0, 0].plot(np.asarray(agent.updates_history["b"]))
-    axs[0, 1].plot(
-        np.stack(
-            [np.asarray(agent.updates_history[n])[:, 0] for n in ("x_lb", "x_ub")], -1
-        ),
-    )
-    axs[1, 0].plot(np.asarray(agent.updates_history["f"]))
-    axs[1, 1].plot(np.asarray(agent.updates_history["V0"]))
-    axs[2, 0].plot(np.asarray(agent.updates_history["A"]).reshape(-1,16))
-    axs[2, 1].plot(np.asarray(agent.updates_history["B"]).squeeze())
-    axs[0, 0].set_ylabel("$b$")
-    axs[0, 1].set_ylabel("$x_1$")
-    axs[1, 0].set_ylabel("$f$")
-    axs[1, 1].set_ylabel("$V_0$")
-    axs[2, 0].set_ylabel("$A$")
-    axs[2, 1].set_ylabel("$B$")
-
-    img_name = "para.svg"
-    path = os.path.join(img_path, img_name)
-    plt.savefig(path, format="svg")
-
-    plt.show()

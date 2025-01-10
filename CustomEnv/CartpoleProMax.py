@@ -30,6 +30,7 @@ class CartPoleV3(gym.Env):
             theta_threshold: float = 30,
             theta_dot_threshold: float = 720 * 2 * math.pi / 360,
             force_threshold: float = 100.0,
+            input_noise: float = 0.1,
             w: np.ndarray[np.float32] = np.asarray([[1e2], [1e2], [1e2], [1e2]]),
             ignore_terminal: bool = False,
 
@@ -64,6 +65,7 @@ class CartPoleV3(gym.Env):
                                   [theta_dot_threshold]]))
         self.a_bnd = (-force_threshold, force_threshold)
         self.w = w
+        self.e_bnd = (-input_noise, input_noise)
 
         # Angle limit set to 2 * theta_threshold_radians so failing observation
         # is still within bounds.
@@ -387,6 +389,7 @@ class CartPoleV4(CartPoleV3):
         # 检查是否reset
         # 注意此处产生的报错，排查不能通过检查的原因
         force = float(action)
+        force += self.np_random.uniform(*self.e_bnd)
         # assert self.action_space.contains(
         #     action
         # ), f"{action!r} ({type(action)}) invalid"
