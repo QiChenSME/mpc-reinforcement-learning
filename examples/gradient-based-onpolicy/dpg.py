@@ -268,6 +268,7 @@ if __name__ == "__main__":
     )
 
     # build and wrap appropriately the agent
+    # noinspection PyTypeChecker
     agent = Log(
         RecordUpdates(
             LstdDpgAgent(

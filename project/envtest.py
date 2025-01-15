@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import keyboard
 
 if __name__ == '__main__':
-    steps = 1000
+    steps = 10000
     act_data = []
     x_datas = []
     x_dot_datas = []

@@ -24,7 +24,7 @@ class LinearMpc(Mpc[cs.SX]):
     env = CartPoleV3()
 
     horizon = 10
-    discount_factor = 0.6
+    discount_factor = 0.9
     M = env.masscart
     m = env.masspole
     g = env.gravity
@@ -100,7 +100,7 @@ class LinearMpc(Mpc[cs.SX]):
             "bound_consistency": True,
             "calc_lam_x": True,
             "calc_lam_p": False,
-            "fatrop": {"max_iter": 500, "print_level": 0},
+            "fatrop": {"max_iter": 1000, "print_level": 0},
         }
         self.init_solver(opts, solver="fatrop", type="nlp")
 
@@ -108,8 +108,8 @@ class LinearMpc(Mpc[cs.SX]):
 if __name__ == "__main__":
     # instantiate the env and wrap it
     render_mode = None
-    # render_mode = "human"
-    env = MonitorEpisodes(TimeLimit(CartPoleV4(render_mode=render_mode), max_episode_steps=5_00))
+    render_mode = "human"
+    env = MonitorEpisodes(TimeLimit(CartPoleV4(render_mode=render_mode), max_episode_steps=1_0000))
     # now build the MPC and the dict of learnable parameters
     mpc = LinearMpc()
     learnable_pars = LearnableParametersDict[cs.SX](
@@ -127,8 +127,8 @@ if __name__ == "__main__":
                 mpc=mpc,
                 learnable_parameters=learnable_pars,
                 discount_factor=mpc.discount_factor,
-                update_strategy=100,
-                optimizer=NetwonMethod(learning_rate=5e-2),
+                update_strategy=1,
+                optimizer=NetwonMethod(learning_rate=0),
                 hessian_type="approx",
                 record_td_errors=True,
                 remove_bounds_on_initial_action=True,
@@ -141,7 +141,7 @@ if __name__ == "__main__":
     )
 
     # launch the training simulation
-    agent.train(env=env, episodes=1000, seed=69, raises=False)
+    agent.train(env=env, episodes=1, seed=69, raises=False)
 
     import matplotlib.pyplot as plt
     import os
