@@ -109,7 +109,7 @@ if __name__ == "__main__":
     # instantiate the env and wrap it
     render_mode = None
     render_mode = "human"
-    env = MonitorEpisodes(TimeLimit(CartPoleV4(render_mode=render_mode), max_episode_steps=1_0000))
+    env = MonitorEpisodes(TimeLimit(CartPoleV4(render_mode=render_mode), max_episode_steps=2_000))
     # now build the MPC and the dict of learnable parameters
     mpc = LinearMpc()
     learnable_pars = LearnableParametersDict[cs.SX](
@@ -127,8 +127,8 @@ if __name__ == "__main__":
                 mpc=mpc,
                 learnable_parameters=learnable_pars,
                 discount_factor=mpc.discount_factor,
-                update_strategy=1,
-                optimizer=NetwonMethod(learning_rate=0),
+                update_strategy=500,
+                optimizer=NetwonMethod(learning_rate=1e-2),
                 hessian_type="approx",
                 record_td_errors=True,
                 remove_bounds_on_initial_action=True,

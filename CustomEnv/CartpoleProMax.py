@@ -31,7 +31,7 @@ class CartPoleV3(gym.Env):
             theta_dot_threshold: float = 1080 * 2 * math.pi / 360,
             force_threshold: float = 20.0,
             input_noise: float = 0.1,
-            w: np.ndarray[np.float32] = np.asarray([[80], [1e2], [40], [1e2]]),
+            w: np.ndarray[np.float32] = np.asarray([[1e5], [1e2], [40], [1e2]]),
             ignore_terminal: bool = False,
 
     ):
@@ -412,8 +412,10 @@ class CartPoleV4(CartPoleV3):
         # 定义边界数值（此处定义为正方向一侧的边界值）
         self.theta_threshold = 180
         self.theta_threshold_radians = np.pi
-        self.x_bnd[0][2][0] = -self.theta_threshold_radians/3
-        self.x_bnd[1][2][0] = +self.theta_threshold_radians/3
+        self.x_bnd[0][2][0] = -self.theta_threshold_radians
+        self.x_bnd[1][2][0] = +self.theta_threshold_radians
+        self.x_bnd[0][0][0] = -self.x_threshold
+        self.x_bnd[1][0][0] = +self.x_threshold
         high = np.array(
             [
                 self.x_threshold,
@@ -446,9 +448,9 @@ class CartPoleV4(CartPoleV3):
         # elif x >= self.x_threshold and force > 0:
         #     force = 0
         if x <= -self.x_threshold:
-            force += (-self.x_threshold-x)*10000
+            force += (-self.x_threshold-x)*20000
         elif x >= self.x_threshold:
-            force -= (x-self.x_threshold)*10000
+            force -= (x-self.x_threshold)*20000
 
         costheta = np.cos(theta)
         sintheta = np.sin(theta)
@@ -485,9 +487,9 @@ class CartPoleV4(CartPoleV3):
             theta_dot = theta_dot + self.tau * thetaacc
             theta = theta + self.tau * theta_dot
 
-        while theta <= -np.pi:
+        while theta <= -np.pi*1.5:
             theta += 2 * np.pi
-        while theta > np.pi:
+        while theta > np.pi*1.5:
             theta -= 2 * np.pi
         if x <= -self.x_threshold and x_dot < 0:
             x_dot = [0.0]
@@ -504,7 +506,7 @@ class CartPoleV4(CartPoleV3):
         reward = float(
             0.5
             * (
-                    0.1 * x_dot ** 2 + 1 * x ** 2 + 2 * theta ** 2 + 0.2 * theta_dot ** 2
+                    0.1 * x_dot ** 2 + 1 * x ** 2 + 20 * math.sqrt(math.sqrt(theta ** 2)) + 0.2 * theta_dot ** 2
                     + 0.01 * action ** 2
                     + self.w.T @ np.maximum(0, lb - self.state)
                     + self.w.T @ np.maximum(0, self.state - ub)
@@ -514,7 +516,7 @@ class CartPoleV4(CartPoleV3):
         self.time_step += 1
         self.reward_record[0] = reward
         self.reward_record[1] = 0.5 * 1 * x ** 2
-        self.reward_record[2] = 0.5 * 2 * theta ** 2
+        self.reward_record[2] = 0.5 * 20 * math.sqrt(math.sqrt(theta ** 2))
         self.reward_record[3] = 0.5 * 0.1 * x_dot ** 2
         self.reward_record[4] = 0.5 * 0.2 * theta_dot ** 2
         self.reward_record[6] = 0.5 * 0.01 * action ** 2
