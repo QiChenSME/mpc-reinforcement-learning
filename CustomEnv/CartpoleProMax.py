@@ -503,25 +503,29 @@ class CartPoleV4(CartPoleV3):
         self.state = np.array((x, x_dot, theta, theta_dot), dtype=np.float64).reshape(4, 1)
 
         lb, ub = self.x_bnd[0], self.x_bnd[1]
+
+        self.reward_record[1] = 20 * math.sqrt(math.sqrt(x ** 2))
+        self.reward_record[2] = 20 * math.sqrt(math.sqrt(theta ** 2))
+        self.reward_record[3] = 0.1 * x_dot ** 2
+        self.reward_record[4] = 0.2 * theta_dot ** 2
+        self.reward_record[6] = 0.05 * action ** 2
+        self.reward_record[5] = (self.w.T @ np.maximum(0, lb - self.state)
+                                + self.w.T @ np.maximum(0, self.state - ub))
         reward = float(
             0.5
             * (
-                    0.1 * x_dot ** 2 + 1 * x ** 2 + 20 * math.sqrt(math.sqrt(theta ** 2)) + 0.2 * theta_dot ** 2
-                    + 0.01 * action ** 2
-                    + self.w.T @ np.maximum(0, lb - self.state)
-                    + self.w.T @ np.maximum(0, self.state - ub)
+                    self.reward_record[1] +
+                    self.reward_record[2] +
+                    self.reward_record[3] +
+                    self.reward_record[4] +
+                    self.reward_record[5] +
+                    self.reward_record[6]
             )
         )
 
         self.time_step += 1
         self.reward_record[0] = reward
-        self.reward_record[1] = 0.5 * 1 * x ** 2
-        self.reward_record[2] = 0.5 * 20 * math.sqrt(math.sqrt(theta ** 2))
-        self.reward_record[3] = 0.5 * 0.1 * x_dot ** 2
-        self.reward_record[4] = 0.5 * 0.2 * theta_dot ** 2
-        self.reward_record[6] = 0.5 * 0.01 * action ** 2
-        self.reward_record[5] = 0.5 * (self.w.T @ np.maximum(0, lb - self.state)
-                                 + self.w.T @ np.maximum(0, self.state - ub))
+
 
         # 判断是否渲染
         if self.render_mode == "human":
