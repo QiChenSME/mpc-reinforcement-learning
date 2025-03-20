@@ -21,7 +21,7 @@ from CustomEnv.CartpoleProMax import CartPoleV3, CartPoleV4
 
 class LinearMpc(Mpc[cs.SX]):
     """A simple linear MPC controller."""
-    env = CartPoleV3()
+    env = CartPoleV4()
 
     horizon = 10
     discount_factor = 0.9
