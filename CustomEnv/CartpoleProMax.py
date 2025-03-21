@@ -12,7 +12,7 @@ from gymnasium.error import DependencyNotInstalled
 class CartPoleV3(gym.Env):
     metadata = {
         "render.modes": ["human", "rgb_array"],
-        "render_fps": 100,
+        "render_fps": 180,
     }
     nx = 4
     nu = 1
@@ -559,7 +559,7 @@ class CartPoleV4(CartPoleV3):
 class CartPoleCS(CartPoleV4):
     import casadi as cs
     @staticmethod
-    def dynamics(env, sym_x:cs.SX, sym_u:cs.SX) -> cs.Function:
+    def dynamics_jacobian(env, sym_x:cs.SX, sym_u:cs.SX) -> tuple[cs.Function, cs.Function]:
 
         # x, x_dot, theta, theta_dot = sym_x[0:3]
         x = sym_x[0]
@@ -583,15 +583,42 @@ class CartPoleCS(CartPoleV4):
 
         dynamic_function = cs.Function('nonlinear_dynamic', [sym_x, sym_u], [x_next])
 
-        return dynamic_function
+        A = cs.jacobian(x_next, sym_x)
+        B = cs.jacobian(x_next, sym_u)
+
+        jacobian_function = cs.Function('jacobian', [sym_x, sym_u], [A, B])
+
+        return dynamic_function, jacobian_function
+
+    # @staticmethod
+    # def jacobian(f, sym_x, sym_u):
+    #     A = cs.jacobian(f(sym_x, sym_u), sym_x)
+    #     B = cs.jacobian(f(sym_x, sym_u), sym_u)
+    #
+    #     fuc = cs.Function('jacobian', [sym_x, sym_u], [A, B])
+    #
+    #     return fuc
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.dynamics = self.dynamics(self, cs.SX.sym('x', 4), cs.SX.sym('u', 1))
+        self.sym_x = cs.SX.sym('x', 4)
+        self.sym_u = cs.SX.sym('u', 1)
+        self.dynamics, self.jacobian = self.dynamics_jacobian(self, self.sym_x, self.sym_u)
 
     def step(self, action):
+        self.force_record = action
         action = np.asarray(action).reshape(1, 1)
         self.state = np.asarray(self.dynamics(self.state, action).full().flatten()).reshape(4,1)
+
+        x = self.state[0][0]
+        x_dot = self.state[1][0]
+        theta_dot = self.state[3][0]
+        x = np.clip(x, -self.x_threshold - 0.003, self.x_threshold + 0.003)
+        x_dot = np.clip(x_dot, -self.x_dot_threshold, self.x_dot_threshold)
+        theta_dot = np.clip(theta_dot, -self.theta_dot_threshold, self.theta_dot_threshold)
+        self.state = np.array([x, x_dot, self.state[2][0], theta_dot]).reshape(4, 1)
+
+
         lb, ub = self.x_bnd[0], self.x_bnd[1]
 
         self.reward_record[1] = 20 * math.sqrt(math.sqrt(self.state[0] ** 2))
