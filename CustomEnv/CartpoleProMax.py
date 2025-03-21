@@ -606,7 +606,7 @@ class CartPoleCS(CartPoleV4):
         self.dynamics, self.jacobian = self.dynamics_jacobian(self, self.sym_x, self.sym_u)
 
     def step(self, action):
-        self.force_record = action
+        self.force_record = float(action)
         action = np.asarray(action).reshape(1, 1)
         self.state = np.asarray(self.dynamics(self.state, action).full().flatten()).reshape(4,1)
 

@@ -198,6 +198,7 @@ if __name__ == "__main__":
     # instantiate the env and wrap it
     render_mode = None
     render_mode = "human"
+    mpc_type = "Linear"
     mpc_type = "NonLinear"
     env = MonitorEpisodes(TimeLimit(CartPoleCS(render_mode=render_mode), max_episode_steps=200))
     # now build the MPC and the dict of learnable parameters
@@ -235,7 +236,7 @@ if __name__ == "__main__":
 
     # launch the training simulation
     try:
-        agent.train(env=env, episodes=100000, seed=69, raises=False)
+        agent.train(env=env, episodes=500000, seed=69, raises=False)
     except SystemError:
         pass
     finally:
