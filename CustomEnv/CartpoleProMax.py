@@ -457,7 +457,7 @@ class CartPoleV4(CartPoleV3):
         # 计算输入的实际物理量
         # 中间变量
         temp = (
-                       force + self.polemass_length * np.square(theta_dot) * sintheta
+                   force + self.polemass_length * np.square(theta_dot) * sintheta
                ) / self.total_mass
         # 角加速度
         thetaacc = (self.gravity * sintheta - costheta * temp) / (
@@ -554,3 +554,71 @@ class CartPoleV4(CartPoleV3):
         if self.render_mode == "human":
             self.render()
         return np.array(self.state, dtype=np.float32), {}
+
+
+class CartPoleCS(CartPoleV4):
+    import casadi as cs
+    @staticmethod
+    def dynamics(env, sym_x:cs.SX, sym_u:cs.SX) -> cs.Function:
+
+        # x, x_dot, theta, theta_dot = sym_x[0:3]
+        x = sym_x[0]
+        x_dot = sym_x[1]
+        theta = sym_x[2]
+        theta_dot = sym_x[3]
+
+        force = sym_u[0]
+
+        costheta = cs.cos(theta)
+        sintheta = cs.sin(theta)
+
+        temp = (force + env.polemass_length * theta_dot**2 * sintheta) / env.total_mass
+        denominator_theta = env.length * (4.0 / 3.0 - env.masspole * costheta**2 / env.total_mass)
+        thetaacc = (env.gravity * sintheta - costheta * temp) / denominator_theta
+        xacc  = temp - env.polemass_length * thetaacc * costheta / env.total_mass
+
+        dxdt = cs.vertcat(x_dot, xacc, theta_dot, thetaacc)
+
+        x_next = sym_x + env.tau * dxdt
+
+        dynamic_function = cs.Function('nonlinear_dynamic', [sym_x, sym_u], [x_next])
+
+        return dynamic_function
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.dynamics = self.dynamics(self, cs.SX.sym('x', 4), cs.SX.sym('u', 1))
+
+    def step(self, action):
+        action = np.asarray(action).reshape(1, 1)
+        self.state = np.asarray(self.dynamics(self.state, action).full().flatten()).reshape(4,1)
+        lb, ub = self.x_bnd[0], self.x_bnd[1]
+
+        self.reward_record[1] = 20 * math.sqrt(math.sqrt(self.state[0] ** 2))
+        self.reward_record[2] = 20 * math.sqrt(math.sqrt(self.state[2] ** 2))
+        self.reward_record[3] = 0.1 * self.state[1] ** 2
+        self.reward_record[4] = 0.2 * self.state[3] ** 2
+        self.reward_record[6] = 0.05 * action ** 2
+        self.reward_record[5] = (self.w.T @ np.maximum(0, lb - self.state)
+                                 + self.w.T @ np.maximum(0, self.state - ub))
+        reward = float(
+            0.5
+            * (
+                    self.reward_record[1] +
+                    self.reward_record[2] +
+                    self.reward_record[3] +
+                    self.reward_record[4] +
+                    self.reward_record[5] +
+                    self.reward_record[6]
+            )
+        )
+
+        self.time_step += 1
+        self.reward_record[0] = reward
+
+        # 判断是否渲染
+        if self.render_mode == "human":
+            self.render()
+
+        # truncation=False as the time limit is handled by the `TimeLimit` wrapper added during `make`
+        return np.array(self.state, dtype=np.float32), reward, False, False, {}

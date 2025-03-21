@@ -16,7 +16,7 @@ from mpcrl.util.control import dlqr
 from mpcrl.wrappers.agents import Log, RecordUpdates
 from mpcrl.wrappers.envs import MonitorEpisodes
 
-from CustomEnv.CartpoleProMax import CartPoleV3, CartPoleV4
+from CustomEnv.CartpoleProMax import CartPoleV3, CartPoleV4, CartPoleCS
 
 
 class LinearMpc(Mpc[cs.SX]):
@@ -111,7 +111,7 @@ if __name__ == "__main__":
     # instantiate the env and wrap it
     render_mode = None
     # render_mode = "human"
-    env = MonitorEpisodes(TimeLimit(CartPoleV4(render_mode=render_mode), max_episode_steps=500))
+    env = MonitorEpisodes(TimeLimit(CartPoleCS(render_mode=render_mode), max_episode_steps=500))
     # now build the MPC and the dict of learnable parameters
     mpc = LinearMpc()
     learnable_pars = LearnableParametersDict[cs.SX](
