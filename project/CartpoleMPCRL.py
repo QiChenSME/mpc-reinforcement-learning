@@ -145,6 +145,9 @@ class NonLinearMpc(Mpc[cs.SX]):
         nlp = Nlp[cs.SX]()
         super().__init__(nlp, N)
 
+        self.dynamics = self.env.dynamics
+        self.jacobian = self.env.jacobian
+
         # parameters
         V0 = self.parameter("V0")
         x_lb = self.parameter("x_lb", (nx,))
@@ -157,14 +160,14 @@ class NonLinearMpc(Mpc[cs.SX]):
         s, _, _ = self.variable("s", (nx, N), lb=0)
 
         # dynamics
-        self.set_nonlinear_dynamics(self.env.dynamics)
+        self.set_nonlinear_dynamics(self.dynamics)
 
         # other constraints
         self.constraint("x_lb", x_bnd[0] + x_lb - s, "<=", x[:, 1:])
         self.constraint("x_ub", x[:, 1:], "<=", x_bnd[1] + x_ub + s)
 
         # objective
-        A_init, B_init = self.env.jacobian(self.env.state.flatten(), np.zeros(self.env.nu))
+        A_init, B_init = self.jacobian(self.env.state.flatten(), np.zeros(self.env.nu))
         A_init = A_init.full().reshape((nx, nx))
         B_init = B_init.full().reshape((nx, nu))
         # A_init, B_init = self.fixed_pars_init["A"], self.fixed_pars_init["B"]
