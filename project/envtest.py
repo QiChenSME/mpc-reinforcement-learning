@@ -7,16 +7,16 @@ import matplotlib.pyplot as plt
 import keyboard
 
 if __name__ == '__main__':
-    steps = 10000
+    steps = 100000
     act_data = []
     x_datas = []
     x_dot_datas = []
     theta_datas = []
     theta_dot_datas = []
 
-    env = CartPoleCS(render_mode='human', ignore_terminal=True)
+    env = CartPoleCS(render_mode='human', ignore_terminal=True, tau=0.01)
     # env = gym.make('CartPole-v1', render_mode='human')+
-    env.reset()
+    env.reset(seed=699)
 
     for i in range(steps):
         if keyboard.is_pressed('left'):

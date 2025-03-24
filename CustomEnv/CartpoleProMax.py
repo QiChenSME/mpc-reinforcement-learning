@@ -12,10 +12,36 @@ from gymnasium.error import DependencyNotInstalled
 class CartPoleV3(gym.Env):
     metadata = {
         "render.modes": ["human", "rgb_array"],
-        "render_fps": 180,
+        "render_fps": 1000,
     }
     nx = 4
     nu = 1
+
+    @ staticmethod
+    def compute_total_energy(x, x_dot, theta, theta_dot, m_cart, m_pole, l_pole, L_pole, g):
+        # 摆杆参数
+        l = l_pole  # 质心到支点的距离（假设 l = L/2）
+        I_cm = (1 / 12) * m_pole * L_pole ** 2  # 绕质心的转动惯量
+        I = I_cm + m_pole * l ** 2  # 绕支点的转动惯量
+
+        # 小车动能
+        ke_cart = 0.5 * m_cart * x_dot ** 2
+
+        # 摆杆动能（平动 + 转动）
+        v_pole_sq = x_dot ** 2 + 2 * l * x_dot * theta_dot * cs.cos(theta) + l ** 2 * theta_dot ** 2
+        ke_pole_trans = 0.5 * m_pole * v_pole_sq
+        ke_pole_rot = 0.5 * I * theta_dot ** 2
+        ke_pole = ke_pole_trans + ke_pole_rot
+
+        # 总动能
+        ke_total = ke_cart + ke_pole
+
+        # 势能
+        pe = m_pole * g * l * cs.cos(theta)
+
+        # 总机械能
+        energy_total = ke_total + pe
+        return energy_total
 
     def __init__(
         self, *,
@@ -97,6 +123,8 @@ class CartPoleV3(gym.Env):
 
         self.force_record = None
         self.reward_record = None
+
+        self.total_energy = None
 
         # 清空越界判定
         self.steps_beyond_terminated = None
@@ -219,6 +247,7 @@ class CartPoleV3(gym.Env):
         self.time_step = 0
         self.force_record = 0
         self.reward_record = np.zeros(7)
+        self.total_energy = 0
 
         if self.render_mode == "human":
             self.render()
@@ -319,6 +348,7 @@ class CartPoleV3(gym.Env):
         thetaV = font.render(f'ThetaV: {self.state[3][0]:.2f}', True, (0, 0, 0))
         time = font.render(f'time: {(self.time_step*self.tau):.2f}', True, (0, 0, 0))
         force = font.render(f'force: {self.force_record :.2f}', True, (0, 0, 0))
+        energy = font.render(f'energy: {self.total_energy*100 :.2f}', True, (0, 0, 0))
 
         reward = font.render(f'loss: {self.reward_record[0] :.2f}', True, (0, 0, 0))
         reward1 = font.render(f'x loss: {self.reward_record[1] :.2f}', True, (0, 0, 0))
@@ -338,6 +368,7 @@ class CartPoleV3(gym.Env):
         self.screen.blit(thetaV, (0, 47))
         self.screen.blit(time, (0, 59))
         self.screen.blit(force, (0, 83))
+        self.screen.blit(energy, (119, 83))
 
         self.screen.blit(reward, (119, 0))
         self.screen.blit(reward1, (119, 11))
@@ -502,6 +533,10 @@ class CartPoleV4(CartPoleV3):
         # 将更新后的状态数据放入nparray中，赋值给state属性
         self.state = np.array((x, x_dot, theta, theta_dot), dtype=np.float64).reshape(4, 1)
 
+        # 机械能计算
+        self.total_energy = self.compute_total_energy(self.state[0][0], self.state[1][0], self.state[2][0], self.state[3][0],
+                             self.masscart, self.masspole, self.length, self.polemass_length, self.gravity)
+
         lb, ub = self.x_bnd[0], self.x_bnd[1]
 
         self.reward_record[1] = 20 * math.sqrt(math.sqrt(x ** 2))
@@ -577,7 +612,7 @@ class CartPoleCS(CartPoleV4):
         thetaacc = (env.gravity * sintheta - costheta * temp) / denominator_theta
         xacc  = temp - env.polemass_length * thetaacc * costheta / env.total_mass
 
-        dxdt = cs.vertcat(x_dot, xacc, theta_dot, thetaacc)
+        dxdt = cs.vertcat(x_dot + env.tau*xacc, xacc, theta_dot + env.tau*thetaacc, thetaacc)
 
         x_next = sym_x + env.tau * dxdt
 
@@ -607,17 +642,38 @@ class CartPoleCS(CartPoleV4):
 
     def step(self, action):
         self.force_record = float(action)
-        action = np.asarray(action).reshape(1, 1)
-        self.state = np.asarray(self.dynamics(self.state, action).full().flatten()).reshape(4,1)
+
+        force = float(action)
+        x = self.state[0][0]
+        if x <= -self.x_threshold:
+            force += (-self.x_threshold-x)*2000.0
+        elif x >= self.x_threshold:
+            force -= (x-self.x_threshold)*2000.0
+
+        force = np.asarray(force).reshape(1, 1)
+        self.state = np.asarray(self.dynamics(self.state, force).full().flatten()).reshape(4,1)
 
         x = self.state[0][0]
         x_dot = self.state[1][0]
+        theta = self.state[2][0]
         theta_dot = self.state[3][0]
+
+        while theta <= -np.pi*1.5:
+            theta += 2 * np.pi
+        while theta > np.pi*1.5:
+            theta -= 2 * np.pi
+        if x <= -self.x_threshold and x_dot < 0:
+            x_dot = 0.0
+        elif x >= self.x_threshold and x_dot > 0:
+            x_dot = 0.0
         x = np.clip(x, -self.x_threshold - 0.003, self.x_threshold + 0.003)
         x_dot = np.clip(x_dot, -self.x_dot_threshold, self.x_dot_threshold)
         theta_dot = np.clip(theta_dot, -self.theta_dot_threshold, self.theta_dot_threshold)
-        self.state = np.array([x, x_dot, self.state[2][0], theta_dot]).reshape(4, 1)
+        self.state = np.array([x, x_dot, theta, theta_dot]).reshape(4, 1)
 
+        # 机械能计算
+        # self.total_energy = self.compute_total_energy(self.state[0][0], self.state[1][0], self.state[2][0], self.state[3][0],
+        #                      self.masscart, self.masspole, self.length, self.polemass_length, self.gravity)
 
         lb, ub = self.x_bnd[0], self.x_bnd[1]
 

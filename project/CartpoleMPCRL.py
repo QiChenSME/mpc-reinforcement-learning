@@ -164,10 +164,10 @@ class NonLinearMpc(Mpc[cs.SX]):
         self.constraint("x_ub", x[:, 1:], "<=", x_bnd[1] + x_ub + s)
 
         # objective
-        # A_init, B_init = self.env.jacobian(self.env.state.flatten(), np.zeros(self.env.nu))
-        # A_init = A_init.full().reshape((nx, nx))
-        # B_init = B_init.full().reshape((nx, nu))
-        A_init, B_init = self.fixed_pars_init["A"], self.fixed_pars_init["B"]
+        A_init, B_init = self.env.jacobian(self.env.state.flatten(), np.zeros(self.env.nu))
+        A_init = A_init.full().reshape((nx, nx))
+        B_init = B_init.full().reshape((nx, nu))
+        # A_init, B_init = self.fixed_pars_init["A"], self.fixed_pars_init["B"]
         S = cs.DM(dlqr(A_init, B_init, 0.5 * np.eye(nx), 0.25 * np.eye(nu))[1])
         gammapowers = cs.DM(gamma ** np.arange(N)).T
         self.minimize(
@@ -200,7 +200,7 @@ if __name__ == "__main__":
     render_mode = "human"
     mpc_type = "Linear"
     mpc_type = "NonLinear"
-    env = MonitorEpisodes(TimeLimit(CartPoleCS(render_mode=render_mode), max_episode_steps=200))
+    env = MonitorEpisodes(TimeLimit(CartPoleCS(render_mode=render_mode), max_episode_steps=2000))
     # now build the MPC and the dict of learnable parameters
     if mpc_type == "NonLinear":
         mpc = NonLinearMpc()
@@ -221,7 +221,7 @@ if __name__ == "__main__":
                 mpc=mpc,
                 learnable_parameters=learnable_pars,
                 discount_factor=mpc.discount_factor,
-                update_strategy=200,
+                update_strategy=2000,
                 optimizer=NetwonMethod(learning_rate=5e-2),
                 hessian_type="approx",
                 record_td_errors=True,
