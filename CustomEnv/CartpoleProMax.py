@@ -57,7 +57,7 @@ class CartPoleV3(gym.Env):
             theta_dot_threshold: float = 1080 * 2 * math.pi / 360,
             force_threshold: float = 20.0,
             input_noise: float = 0.1,
-            w: np.ndarray[np.float32] = np.asarray([[1e5], [1e2], [40], [1e2]]),
+            w: np.ndarray[np.float32] = np.asarray([[1e4], [1e2], [5e2], [1e2]]),
             ignore_terminal: bool = False,
 
     ):
@@ -113,6 +113,8 @@ class CartPoleV3(gym.Env):
 
         # 渲染器的相关设置
         self.render_mode = render_mode
+
+        self.x_bound = self.x_threshold * 1.5
 
         self.screen_width = 1600
         self.screen_height = 400
@@ -285,10 +287,10 @@ class CartPoleV3(gym.Env):
             self.clock = pygame.time.Clock()
         font = pygame.font.Font(None, 20)
 
-        world_width = self.x_threshold * 2
+        world_width = self.x_bound * 2
         scale = self.screen_width / world_width
         polewidth = 8.0
-        polelen = scale * (2 * self.length)
+        polelen = scale * (2 * self.length)*1.25
         cartwidth = 50.0
         cartheight = 30.0
 
@@ -441,8 +443,8 @@ class CartPoleV4(CartPoleV3):
     def __init__(self, **kwargs):
         super(CartPoleV4, self).__init__(**kwargs)
         # 定义边界数值（此处定义为正方向一侧的边界值）
-        self.theta_threshold = 180
-        self.theta_threshold_radians = np.pi
+        self.theta_threshold = 30
+        self.theta_threshold_radians = np.pi / 6
         self.x_bnd[0][2][0] = -self.theta_threshold_radians
         self.x_bnd[1][2][0] = +self.theta_threshold_radians
         self.x_bnd[0][0][0] = -self.x_threshold
@@ -582,7 +584,7 @@ class CartPoleV4(CartPoleV3):
             options, -0.5, 0.5  # default low
         )  # default high
         self.state = self.np_random.uniform(low=low, high=high, size=(4,1))
-        self.state[2][0] = np.pi
+        self.state[2][0] = self.np_random.uniform(-np.pi, np.pi)
         self.steps_beyond_terminated = None
         self.time_step = 0
 
@@ -640,33 +642,50 @@ class CartPoleCS(CartPoleV4):
         self.sym_u = cs.SX.sym('u', 1)
         self.dynamics, self.jacobian = self.dynamics_jacobian(self, self.sym_x, self.sym_u)
 
+        self.last_action = cs.DM(np.zeros(self.nu,))
+
+        self.x_bound = self.x_threshold * 1.5
+
+        # self.x_bnd = (np.asarray([[-self.x_threshold * 0.8],
+        #                           [-self.x_dot_threshold],
+        #                           [-self.theta_threshold_radians],
+        #                           [-self.theta_dot_threshold]]),
+        #               np.asarray([[self.x_threshold * 0.8],
+        #                           [self.x_dot_threshold],
+        #                           [self.theta_threshold_radians],
+        #                           [self.theta_dot_threshold]]))
+        # self.a_bnd = (-self.force_threshold, self.force_threshold)
+
     def step(self, action):
         self.force_record = float(action)
 
         force = float(action)
+        force = np.clip(force, -self.force_threshold, self.force_threshold)
         x = self.state[0][0]
-        if x <= -self.x_threshold:
-            force += (-self.x_threshold-x)*2000.0
-        elif x >= self.x_threshold:
-            force -= (x-self.x_threshold)*2000.0
+        if x <= -self.x_bound:
+            force += (-self.x_bound-x)*400.0
+        elif x >= self.x_bound:
+            force -= (x-self.x_bound)*400.0
 
         force = np.asarray(force).reshape(1, 1)
+
         self.state = np.asarray(self.dynamics(self.state, force).full().flatten()).reshape(4,1)
+        self.last_action = force
 
         x = self.state[0][0]
         x_dot = self.state[1][0]
         theta = self.state[2][0]
         theta_dot = self.state[3][0]
 
-        while theta <= -np.pi*1.5:
+        while theta <= -np.pi:
             theta += 2 * np.pi
-        while theta > np.pi*1.5:
+        while theta > np.pi:
             theta -= 2 * np.pi
-        if x <= -self.x_threshold and x_dot < 0:
+        if x <= -self.x_bound and x_dot < 0:
             x_dot = 0.0
-        elif x >= self.x_threshold and x_dot > 0:
+        elif x >= self.x_bound and x_dot > 0:
             x_dot = 0.0
-        x = np.clip(x, -self.x_threshold - 0.003, self.x_threshold + 0.003)
+        x = np.clip(x, -self.x_bound - 0.05, self.x_bound + 0.05)
         x_dot = np.clip(x_dot, -self.x_dot_threshold, self.x_dot_threshold)
         theta_dot = np.clip(theta_dot, -self.theta_dot_threshold, self.theta_dot_threshold)
         self.state = np.array([x, x_dot, theta, theta_dot]).reshape(4, 1)

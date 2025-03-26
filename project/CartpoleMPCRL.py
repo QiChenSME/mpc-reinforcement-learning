@@ -15,6 +15,7 @@ from mpcrl.optim import NetwonMethod
 from mpcrl.util.control import dlqr
 from mpcrl.wrappers.agents import Log, RecordUpdates
 from mpcrl.wrappers.envs import MonitorEpisodes
+from mpcrl.core.exploration import *
 
 from CustomEnv.CartpoleProMax import CartPoleV3, CartPoleV4, CartPoleCS
 
@@ -119,21 +120,23 @@ class NonLinearMpc(Mpc[cs.SX]):
 
     C = M * m * l ** 2
 
+    A_init, B_init = env.jacobian(env.state.flatten(), np.zeros(env.nu))
+    A_init = A_init.full().reshape((env.nx, env.nx))
+    B_init = B_init.full().reshape((env.nx, env.nu))
+
     learnable_pars_init = {
         "V0": np.asarray(0.0),
         "x_lb": np.asarray(env.x_bnd[0]).reshape(4, ),
         "x_ub": np.asarray(env.x_bnd[1]).reshape(4, ),
         "f": np.zeros(env.nx + env.nu),
+        "Q": 0.5 * np.eye(env.nx),
+        "R": 0.25 * np.eye(env.nu),
     }
     fixed_pars_init = {
-        "A": np.eye(4) + np.asarray([[0, 1, 0, 0],
-                         [0, 0, (- m**3 * l**4 * g * (M+m) + m**4 * g**2 * l**4)/C, 0],
-                         [0, 0, 0, 1],
-                         [0, 0, (M+m)*m*g*l, 0]]) * Ts / C,
-        "B": np.asarray([[0],
-                         [m * l**2],
-                         [0],
-                         [-m * l]]) * Ts / C,
+        "S": dlqr(A_init,
+                  B_init,
+                  learnable_pars_init["Q"],
+                  learnable_pars_init["R"])[1]
     }
 
     def __init__(self, *args, **kwargs) -> None:
@@ -154,6 +157,10 @@ class NonLinearMpc(Mpc[cs.SX]):
         x_ub = self.parameter("x_ub", (nx,))
         f = self.parameter("f", (nx + nu, 1))
 
+        Q = self.parameter("Q", (nx, nx))
+        R = self.parameter("R", (nu, nu))
+        S = self.parameter("S", (nx, nx))
+
         # variables (state, action, slack)
         x, _ = self.state("x", nx, bound_initial=False)
         u, _ = self.action("u", nu, lb=a_bnd[0], ub=a_bnd[1])
@@ -167,19 +174,20 @@ class NonLinearMpc(Mpc[cs.SX]):
         self.constraint("x_ub", x[:, 1:], "<=", x_bnd[1] + x_ub + s)
 
         # objective
-        A_init, B_init = self.jacobian(self.env.state.flatten(), np.zeros(self.env.nu))
-        A_init = A_init.full().reshape((nx, nx))
-        B_init = B_init.full().reshape((nx, nu))
+
         # A_init, B_init = self.fixed_pars_init["A"], self.fixed_pars_init["B"]
-        S = cs.DM(dlqr(A_init, B_init, 0.5 * np.eye(nx), 0.25 * np.eye(nu))[1])
+        S_init = cs.DM(dlqr(self.A_init, self.B_init, 0.5 * np.eye(nx), 0.25 * np.eye(nu))[1])
+
         gammapowers = cs.DM(gamma ** np.arange(N)).T
         self.minimize(
-            V0
+            # V0
+            # + cs.bilin(Q, x[:, 0])
+            # + cs.bilin(R, u[:, 0])
             + cs.bilin(S, x[:, -1])
             + cs.sum2(f.T @ cs.vertcat(x[:, :-1], u))
             + 0.5
             * cs.sum2(
-                gammapowers * (cs.sum1(x[:, :-1] ** 2) + 0.5 * cs.sum1(u ** 2) + w.T @ s)
+                gammapowers * (cs.sum1(Q @ x[:, :-1] * x[:, :-1]) + 0.5 * cs.sum1(R @ u * u) + w.T @ s)
             )
         )
 
@@ -194,6 +202,52 @@ class NonLinearMpc(Mpc[cs.SX]):
         }
         self.init_solver(opts, solver="fatrop", type="nlp")
 
+    def minimize_update(self):
+        N = self.horizon
+        gamma = self.discount_factor
+        w = self.env.w
+        nx, nu = self.env.nx, self.env.nu
+        x_bnd, a_bnd = self.env.x_bnd, self.env.a_bnd
+
+        # parameters
+        V0 = self.parameter("V0")
+        f = self.parameter("f", (nx + nu, 1))
+
+        # variables (state, action, slack)
+        x, _ = self.state("x", nx, bound_initial=False)
+        u, _ = self.action("u", nu, lb=a_bnd[0], ub=a_bnd[1])
+        s, _, _ = self.variable("s", (nx, N), lb=0)
+
+        A, B = self.jacobian(self.env.state.flatten(), np.zeros(self.env.nu))
+        A = A.full().reshape((nx, nx))
+        B = B.full().reshape((nx, nu))
+        S = cs.DM(dlqr(A, B, 0.5 * np.eye(nx), 0.25 * np.eye(nu))[1])
+        gammapowers = cs.DM(gamma ** np.arange(N)).T
+        self.minimize(
+            # V0
+            + cs.bilin(S, x[:, -1])
+            + cs.sum2(f.T @ cs.vertcat(x[:, :-1], u))
+            + 0.5
+            * cs.sum2(
+                gammapowers * (cs.sum1(x[:, :-1] ** 2) + 0.5 * cs.sum1(u ** 2) + w.T @ s)
+            )
+        )
+
+    def para_update(self):
+        pass
+
+
+class NonLinearLstdQLearningAgent(LstdQLearningAgent):
+    def terminal_cost_update(self) -> None:
+        A, B = self.V.jacobian(self.V.env.state.flatten(), self.V.env.last_action)
+        A = A.full().reshape((self.V.env.nx, self.V.env.nx))
+        B = B.full().reshape((self.V.env.nx, self.V.env.nu))
+        self._fixed_pars["S"] = dlqr(A, B, self._fixed_pars["Q"], self._fixed_pars["R"])[1]
+
+    def _establish_callback_hooks(self) -> None:
+        super()._establish_callback_hooks()
+        self._hook_callback("terminal_cost_update", "on timestep_end", self.terminal_cost_update)
+
 
 if __name__ == "__main__":
     import os
@@ -203,7 +257,7 @@ if __name__ == "__main__":
     render_mode = "human"
     mpc_type = "Linear"
     mpc_type = "NonLinear"
-    env = MonitorEpisodes(TimeLimit(CartPoleCS(render_mode=render_mode), max_episode_steps=2000))
+    env = MonitorEpisodes(TimeLimit(CartPoleCS(render_mode=render_mode), max_episode_steps=1000))
     # now build the MPC and the dict of learnable parameters
     if mpc_type == "NonLinear":
         mpc = NonLinearMpc()
@@ -218,24 +272,47 @@ if __name__ == "__main__":
 
     # build and wrap appropriately the agent
     # noinspection PyTypeChecker
-    agent = Log(
-        RecordUpdates(
-            LstdQLearningAgent(
-                mpc=mpc,
-                learnable_parameters=learnable_pars,
-                discount_factor=mpc.discount_factor,
-                update_strategy=2000,
-                optimizer=NetwonMethod(learning_rate=5e-2),
-                hessian_type="approx",
-                record_td_errors=True,
-                remove_bounds_on_initial_action=True,
-                use_last_action_on_fail=True,
+    if mpc_type == "NonLinear":
+        # noinspection PyTypeChecker
+        agent = Log(
+            RecordUpdates(
+                NonLinearLstdQLearningAgent(
+                    mpc=mpc,
+                    learnable_parameters=learnable_pars,
+                    fixed_parameters=mpc.fixed_pars_init,
+                    discount_factor=mpc.discount_factor,
+                    update_strategy=20,
+                    optimizer=NetwonMethod(learning_rate=0),
+                    hessian_type="approx",
+                    record_td_errors=True,
+                    remove_bounds_on_initial_action=True,
+                    use_last_action_on_fail=True,
+                    # exploration=EpsilonGreedyExploration(0.01, 1, hook="on_timestep_end"),
+                )
+            ),
+            level=logging.DEBUG,
+            log_frequencies={"on_timestep_end": 1000},
+        )
+    else:
+        # noinspection PyTypeChecker
+        agent = Log(
+            RecordUpdates(
+                LstdQLearningAgent(
+                    mpc=mpc,
+                    learnable_parameters=learnable_pars,
+                    discount_factor=mpc.discount_factor,
+                    update_strategy=200,
+                    optimizer=NetwonMethod(learning_rate=3e-2),
+                    hessian_type="approx",
+                    record_td_errors=True,
+                    remove_bounds_on_initial_action=True,
+                    use_last_action_on_fail=True,
 
-            )
-        ),
-        level=logging.DEBUG,
-        log_frequencies={"on_timestep_end": 1000},
-    )
+                )
+            ),
+            level=logging.DEBUG,
+            log_frequencies={"on_timestep_end": 1000},
+        )
 
     # launch the training simulation
     try:
@@ -311,6 +388,11 @@ if __name__ == "__main__":
             axs[0].set_ylabel("$x_1$")
             axs[1].set_ylabel("$f$")
             axs[2].set_ylabel("$V_0$")
+            _, axs = plt.subplots(2, 1, constrained_layout=True, sharex=True)
+            axs[0].plot(np.asarray(agent.updates_history["Q"]).reshape(-1, mpc.env.nx**2))
+            axs[1].plot(np.asarray(agent.updates_history["R"]).reshape(-1,mpc.env.nu**2))
+            axs[0].set_ylabel("$Q$")
+            axs[1].set_ylabel("$R$")
         else:
             _, axs = plt.subplots(3, 2, constrained_layout=True, sharex=True)
             axs[0, 0].plot(np.asarray(agent.updates_history["b"]))
