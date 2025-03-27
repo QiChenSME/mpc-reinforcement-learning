@@ -584,7 +584,7 @@ class CartPoleV4(CartPoleV3):
             options, -0.5, 0.5  # default low
         )  # default high
         self.state = self.np_random.uniform(low=low, high=high, size=(4,1))
-        self.state[2][0] = self.np_random.uniform(-np.pi, np.pi)
+        self.state[2][0] = self.np_random.uniform(-np.pi*0.25, np.pi*0.25)
         self.steps_beyond_terminated = None
         self.time_step = 0
 

@@ -10,15 +10,15 @@ from csnlp.wrappers import Mpc
 from gymnasium.spaces import Box
 from gymnasium.wrappers import TimeLimit
 
-from mpcrl import LearnableParameter, LearnableParametersDict, LstdQLearningAgent
-from mpcrl.optim import NetwonMethod
+from mpcrl import LearnableParameter, LearnableParametersDict, LstdQLearningAgent, LstdDpgAgent, UpdateStrategy
+from mpcrl.optim import NetwonMethod, GradientDescent
 from mpcrl.util.control import dlqr
 from mpcrl.wrappers.agents import Log, RecordUpdates
 from mpcrl.wrappers.envs import MonitorEpisodes
 from mpcrl.core.exploration import *
 
 from CustomEnv.CartpoleProMax import CartPoleV3, CartPoleV4, CartPoleCS
-
+from CustomAgent.NonLinear import *
 
 class LinearMpc(Mpc[cs.SX]):
     """A simple linear MPC controller."""
@@ -202,61 +202,16 @@ class NonLinearMpc(Mpc[cs.SX]):
         }
         self.init_solver(opts, solver="fatrop", type="nlp")
 
-    def minimize_update(self):
-        N = self.horizon
-        gamma = self.discount_factor
-        w = self.env.w
-        nx, nu = self.env.nx, self.env.nu
-        x_bnd, a_bnd = self.env.x_bnd, self.env.a_bnd
-
-        # parameters
-        V0 = self.parameter("V0")
-        f = self.parameter("f", (nx + nu, 1))
-
-        # variables (state, action, slack)
-        x, _ = self.state("x", nx, bound_initial=False)
-        u, _ = self.action("u", nu, lb=a_bnd[0], ub=a_bnd[1])
-        s, _, _ = self.variable("s", (nx, N), lb=0)
-
-        A, B = self.jacobian(self.env.state.flatten(), np.zeros(self.env.nu))
-        A = A.full().reshape((nx, nx))
-        B = B.full().reshape((nx, nu))
-        S = cs.DM(dlqr(A, B, 0.5 * np.eye(nx), 0.25 * np.eye(nu))[1])
-        gammapowers = cs.DM(gamma ** np.arange(N)).T
-        self.minimize(
-            # V0
-            + cs.bilin(S, x[:, -1])
-            + cs.sum2(f.T @ cs.vertcat(x[:, :-1], u))
-            + 0.5
-            * cs.sum2(
-                gammapowers * (cs.sum1(x[:, :-1] ** 2) + 0.5 * cs.sum1(u ** 2) + w.T @ s)
-            )
-        )
-
-    def para_update(self):
-        pass
-
-
-class NonLinearLstdQLearningAgent(LstdQLearningAgent):
-    def terminal_cost_update(self) -> None:
-        A, B = self.V.jacobian(self.V.env.state.flatten(), self.V.env.last_action)
-        A = A.full().reshape((self.V.env.nx, self.V.env.nx))
-        B = B.full().reshape((self.V.env.nx, self.V.env.nu))
-        self._fixed_pars["S"] = dlqr(A, B, self._fixed_pars["Q"], self._fixed_pars["R"])[1]
-
-    def _establish_callback_hooks(self) -> None:
-        super()._establish_callback_hooks()
-        self._hook_callback("terminal_cost_update", "on timestep_end", self.terminal_cost_update)
-
 
 if __name__ == "__main__":
     import os
 
     # instantiate the env and wrap it
-    render_mode = None
+    # render_mode = None
     render_mode = "human"
-    mpc_type = "Linear"
+    # mpc_type = "Linear"
     mpc_type = "NonLinear"
+    rl_type = "Q"
     env = MonitorEpisodes(TimeLimit(CartPoleCS(render_mode=render_mode), max_episode_steps=1000))
     # now build the MPC and the dict of learnable parameters
     if mpc_type == "NonLinear":
@@ -273,26 +228,48 @@ if __name__ == "__main__":
     # build and wrap appropriately the agent
     # noinspection PyTypeChecker
     if mpc_type == "NonLinear":
-        # noinspection PyTypeChecker
-        agent = Log(
-            RecordUpdates(
-                NonLinearLstdQLearningAgent(
-                    mpc=mpc,
-                    learnable_parameters=learnable_pars,
-                    fixed_parameters=mpc.fixed_pars_init,
-                    discount_factor=mpc.discount_factor,
-                    update_strategy=20,
-                    optimizer=NetwonMethod(learning_rate=0),
-                    hessian_type="approx",
-                    record_td_errors=True,
-                    remove_bounds_on_initial_action=True,
-                    use_last_action_on_fail=True,
-                    # exploration=EpsilonGreedyExploration(0.01, 1, hook="on_timestep_end"),
-                )
-            ),
-            level=logging.DEBUG,
-            log_frequencies={"on_timestep_end": 1000},
-        )
+        if rl_type == "Q":
+            # noinspection PyTypeChecker
+            agent = Log(
+                RecordUpdates(
+                    NonLinearLstdQLearningAgent(
+                        mpc=mpc,
+                        learnable_parameters=learnable_pars,
+                        fixed_parameters=mpc.fixed_pars_init,
+                        discount_factor=mpc.discount_factor,
+                        update_strategy=20,
+                        optimizer=NetwonMethod(learning_rate=2e-4),
+                        hessian_type="approx",
+                        record_td_errors=True,
+                        remove_bounds_on_initial_action=True,
+                        use_last_action_on_fail=True,
+                        # exploration=EpsilonGreedyExploration(0.01, 1, hook="on_timestep_end"),
+                    )
+                ),
+                level=logging.DEBUG,
+                log_frequencies={"on_timestep_end": 1000},
+            )
+        elif rl_type == "dpg":
+            rollout_length = 1000
+            # noinspection PyTypeChecker
+            agent = Log(
+                RecordUpdates(
+                    NonLinearLstdDpgAgent(
+                        mpc=mpc,
+                        learnable_parameters=learnable_pars,
+                        fixed_parameters=mpc.fixed_pars_init,
+                        discount_factor=mpc.discount_factor,
+                        optimizer=GradientDescent(learning_rate=4e-5),
+                        update_strategy=UpdateStrategy(rollout_length, "on_timestep_end"),
+                        rollout_length=rollout_length,
+                        exploration=OrnsteinUhlenbeckExploration(0.0, 0.05, mode="additive"),
+                        record_policy_performance=True,
+                        record_policy_gradient=True,
+                    )
+                ),
+                level=logging.DEBUG,
+                log_frequencies={"on_timestep_end": 1000},
+            )
     else:
         # noinspection PyTypeChecker
         agent = Log(
@@ -302,7 +279,7 @@ if __name__ == "__main__":
                     learnable_parameters=learnable_pars,
                     discount_factor=mpc.discount_factor,
                     update_strategy=200,
-                    optimizer=NetwonMethod(learning_rate=3e-2),
+                    optimizer=NetwonMethod(learning_rate=3e-6),
                     hessian_type="approx",
                     record_td_errors=True,
                     remove_bounds_on_initial_action=True,
@@ -343,7 +320,7 @@ if __name__ == "__main__":
         axs[3].plot(X[3])
         axs[4].plot(U)
         for i in range(2):
-            # axs[0].axhline(env.get_wrapper_attr("x_bnd")[i][0], color="r")
+            axs[0].axhline(0, color="r")
             axs[2].axhline(env.get_wrapper_attr("x_bnd")[i][2], color="r")
             # axs[4].axhline(env.get_wrapper_attr("a_bnd")[i], color="r")
         axs[0].set_ylabel("$X$")
@@ -355,12 +332,20 @@ if __name__ == "__main__":
         img_name = "state_last_episode.svg"
         path = os.path.join(img_path, img_name)
         plt.savefig(path, format="svg")
-
-        _, axs = plt.subplots(2, 1, constrained_layout=True, sharex=True)
-        axs[0].plot(agent.td_errors[-len(R):-1], "o", markersize=1)
-        axs[1].semilogy(R, "o", markersize=1)
-        axs[0].set_ylabel(r"$\tau$")
-        axs[1].set_ylabel("$L$")
+        if rl_type == "dpg":
+            _, axs = plt.subplots(3, 1, constrained_layout=True)
+            axs[0].plot(agent.policy_performances)
+            axs[1].semilogy(np.linalg.norm(agent.policy_gradients, axis=1))
+            axs[2].semilogy(R, "o", markersize=1)
+            axs[0].set_ylabel(r"$J(\pi_\theta)$")
+            axs[1].set_ylabel(r"$||\nabla_\theta J(\pi_\theta)||$")
+            axs[2].set_ylabel("$L$")
+        elif rl_type == "Q":
+            _, axs = plt.subplots(2, 1, constrained_layout=True, sharex=True)
+            axs[0].plot(agent.td_errors[-len(R):-1], "o", markersize=1)
+            axs[1].semilogy(R, "o", markersize=1)
+            axs[0].set_ylabel(r"$\tau$")
+            axs[1].set_ylabel("$L$")
 
         img_name = "td_error_and_loss_last_episode.svg"
         path = os.path.join(img_path, img_name)
