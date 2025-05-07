@@ -46,15 +46,23 @@ from CustomEnv.CartpoleProMax import CartPoleV3, CartPoleV4, CartPoleCS
 
 
 class NonLinearLstdQLearningAgent(LstdQLearningAgent):
-    def terminal_cost_update(self) -> None:
+    def _terminal_cost_update(self, *args) -> None:
         A, B = self.V.jacobian(self.V.env.state.flatten(), self.V.env.last_action)
         A = A.full().reshape((self.V.env.nx, self.V.env.nx))
         B = B.full().reshape((self.V.env.nx, self.V.env.nu))
+
+        self._fixed_pars["Q"] = 0.5 * (self._fixed_pars["Q"] + self._fixed_pars["Q"].T)
+        self._fixed_pars["R"] = 0.5 * (self._fixed_pars["R"] + self._fixed_pars["R"].T)
         self._fixed_pars["S"] = dlqr(A, B, self._fixed_pars["Q"], self._fixed_pars["R"])[1]
+
+    def _symmetric_q_r(self):
+        self._fixed_pars["Q"] = 0.5 * (self._fixed_pars["Q"] + self._fixed_pars["Q"].T)
+        self._fixed_pars["R"] = 0.5 * (self._fixed_pars["R"] + self._fixed_pars["R"].T)
 
     def _establish_callback_hooks(self) -> None:
         super()._establish_callback_hooks()
-        self._hook_callback("terminal_cost_update", "on timestep_end", self.terminal_cost_update)
+        self._hook_callback("symmetric_q_r", "on_update", self._symmetric_q_r)
+        self._hook_callback("terminal_cost_update", "on_timestep_end", self._terminal_cost_update)
 
     def _try_store_experience(
             self, cost: SupportsFloat, solQ: Solution[SymType], solV: Solution[SymType]
@@ -64,14 +72,15 @@ class NonLinearLstdQLearningAgent(LstdQLearningAgent):
         not store it. Returns whether it was successful or not."""
         success = solQ.success and solV.success
         if success:
-            td_error = -float(cost) + self.discount_factor * solV.f - solQ.f
+            td_error = float(cost) + self.discount_factor * solV.f - solQ.f
+            # print("td_error: ", td_error, "cost: ", cost, "solV.f: ", solV.f, "solQ.f: ", solQ.f)
             if self.hessian_type == "none":
                 dQ = self._sensitivity(solQ)
-                gradient = td_error * dQ
+                gradient = -td_error * dQ
                 self.store_experience(gradient)
             else:
                 dQ, ddQ = self._sensitivity(solQ)
-                gradient = td_error * dQ
+                gradient = -td_error * dQ
                 hessian = np.multiply.outer(dQ, dQ) - td_error * ddQ
                 self.store_experience((gradient, hessian))
         else:

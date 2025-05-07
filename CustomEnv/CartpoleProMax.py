@@ -54,7 +54,7 @@ class CartPoleV3(gym.Env):
             x_threshold: float = 5.0,
             x_dot_threshold: float = 20,
             theta_threshold: float = 30,
-            theta_dot_threshold: float = 1080 * 2 * math.pi / 360,
+            theta_dot_threshold: float = 720 * 2 * math.pi / 360,
             force_threshold: float = 20.0,
             input_noise: float = 0.1,
             w: np.ndarray[np.float32] = np.asarray([[1e4], [1e2], [5e2], [1e2]]),
@@ -585,6 +585,8 @@ class CartPoleV4(CartPoleV3):
         )  # default high
         self.state = self.np_random.uniform(low=low, high=high, size=(4,1))
         self.state[2][0] = self.np_random.uniform(-np.pi*0.25, np.pi*0.25)
+        self.state[0][0] = self.np_random.uniform(-3, 3)
+        # self.state[2][0] = np.pi*0.24
         self.steps_beyond_terminated = None
         self.time_step = 0
 
@@ -669,7 +671,7 @@ class CartPoleCS(CartPoleV4):
 
         force = np.asarray(force).reshape(1, 1)
 
-        self.state = np.asarray(self.dynamics(self.state, force).full().flatten()).reshape(4,1)
+        self.state = np.asarray(self.dynamics(self.state, force).full()).reshape(4,1)
         self.last_action = force
 
         x = self.state[0][0]
@@ -696,13 +698,18 @@ class CartPoleCS(CartPoleV4):
 
         lb, ub = self.x_bnd[0], self.x_bnd[1]
 
-        self.reward_record[1] = 20 * math.sqrt(math.sqrt(self.state[0] ** 2))
-        self.reward_record[2] = 20 * math.sqrt(math.sqrt(self.state[2] ** 2))
+        self.reward_record[1] = 20 * self.state[0] ** 2
+        self.reward_record[2] = 20 * self.state[2] ** 2
         self.reward_record[3] = 0.1 * self.state[1] ** 2
         self.reward_record[4] = 0.2 * self.state[3] ** 2
         self.reward_record[6] = 0.05 * action ** 2
         self.reward_record[5] = (self.w.T @ np.maximum(0, lb - self.state)
                                  + self.w.T @ np.maximum(0, self.state - ub))
+
+        # print("state", self.state.reshape(4))
+        # for i in range(1, 7):
+        #     print(f"r_{i}", self.reward_record[i])
+
         reward = float(
             0.5
             * (

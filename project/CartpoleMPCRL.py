@@ -180,14 +180,16 @@ class NonLinearMpc(Mpc[cs.SX]):
 
         gammapowers = cs.DM(gamma ** np.arange(N)).T
         self.minimize(
-            # V0
-            # + cs.bilin(Q, x[:, 0])
-            # + cs.bilin(R, u[:, 0])
-            + cs.bilin(S, x[:, -1])
+            V0
+            + cs.bilin(S, x[:, -1])/N
             + cs.sum2(f.T @ cs.vertcat(x[:, :-1], u))
             + 0.5
             * cs.sum2(
-                gammapowers * (cs.sum1(Q @ x[:, :-1] * x[:, :-1]) + 0.5 * cs.sum1(R @ u * u) + w.T @ s)
+                gammapowers * (0
+                        + cs.sum1(Q @ x[:, :-1] * x[:, :-1])/N
+                        + 0.5 * cs.sum1(R @ u * u)/N
+                        + w.T @ s
+                )
             )
         )
 
@@ -212,7 +214,10 @@ if __name__ == "__main__":
     # mpc_type = "Linear"
     mpc_type = "NonLinear"
     rl_type = "Q"
-    env = MonitorEpisodes(TimeLimit(CartPoleCS(render_mode=render_mode), max_episode_steps=1000))
+    episode_steps = 500
+    episodes = 1000000
+
+    env = MonitorEpisodes(TimeLimit(CartPoleCS(render_mode=render_mode), max_episode_steps=episode_steps))
     # now build the MPC and the dict of learnable parameters
     if mpc_type == "NonLinear":
         mpc = NonLinearMpc()
@@ -237,8 +242,8 @@ if __name__ == "__main__":
                         learnable_parameters=learnable_pars,
                         fixed_parameters=mpc.fixed_pars_init,
                         discount_factor=mpc.discount_factor,
-                        update_strategy=20,
-                        optimizer=NetwonMethod(learning_rate=2e-4),
+                        update_strategy=50,
+                        optimizer=NetwonMethod(learning_rate=1e-3),
                         hessian_type="approx",
                         record_td_errors=True,
                         remove_bounds_on_initial_action=True,
@@ -288,12 +293,12 @@ if __name__ == "__main__":
                 )
             ),
             level=logging.DEBUG,
-            log_frequencies={"on_timestep_end": 1000},
+            log_frequencies={"on_timestep_end": 500},
         )
 
     # launch the training simulation
     try:
-        agent.train(env=env, episodes=500000, seed=69, raises=False)
+        agent.train(env=env, episodes=episodes, seed=69, raises=False)
     except SystemError:
         pass
     finally:
@@ -302,6 +307,7 @@ if __name__ == "__main__":
         import matplotlib.pyplot as plt
         import os
         import sys
+        import scipy.signal as sig
 
         img_path = "images"
         os.makedirs(img_path, exist_ok=True)
@@ -311,6 +317,7 @@ if __name__ == "__main__":
         R = env.get_wrapper_attr("rewards")[-1]
         T_R = env.get_wrapper_attr("rewards")
         RWD = list(map(sum,T_R))
+        SM_RWD = sig.savgol_filter(RWD, int(len(RWD)/10.0)*2+1, 3)
         STP = list(map(len,T_R))
 
         _, axs = plt.subplots(5, 1, constrained_layout=True, sharex=True)
@@ -352,7 +359,8 @@ if __name__ == "__main__":
         plt.savefig(path, format="svg")
 
         _, axs = plt.subplots(2, 1, constrained_layout=True, sharex=True)
-        axs[0].semilogy(RWD, "ro-", markersize=4)
+        axs[0].semilogy(RWD, "ro", markersize=2)
+        axs[0].semilogy(SM_RWD, "b-", markersize=2)
         axs[0].set_ylabel("$L$")
         axs[1].plot(STP, "bo-", markersize=4)
         axs[1].set_ylabel("steps")
