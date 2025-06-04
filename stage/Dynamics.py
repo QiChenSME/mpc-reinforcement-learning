@@ -6,8 +6,8 @@ import numpy as np
 
 
 class WaferStage:
-    nx = 12
-    nu = 6
+    _nx = 12
+    _nu = 6
     def __init__(self,
                  time_step:Optional[float] = 0.001,
                  m:Optional[float] = 5.0,
@@ -27,26 +27,26 @@ class WaferStage:
         self.J_zz = j_zz
         # 符号变量
         # 输入量
-        F_x = cs.SX.sym("F_x")  # 平移力x
-        F_y = cs.SX.sym("F_y")  # 平移力y
-        F_z = cs.SX.sym("F_z")  # 平移力z
-        M_x = cs.SX.sym("M_x")  # 转矩x
-        M_y = cs.SX.sym("M_y")  # 转矩y
-        M_z = cs.SX.sym("M_z")  # 转矩z
+        F_x = cs.MX.sym("F_x")  # 平移力x
+        F_y = cs.MX.sym("F_y")  # 平移力y
+        F_z = cs.MX.sym("F_z")  # 平移力z
+        M_x = cs.MX.sym("M_x")  # 转矩x
+        M_y = cs.MX.sym("M_y")  # 转矩y
+        M_z = cs.MX.sym("M_z")  # 转矩z
         # 零阶量
-        x = cs.SX.sym("x")  # 位移x
-        y = cs.SX.sym("y")  # 位移y
-        z = cs.SX.sym("z")  # 位移z
-        theta_x = cs.SX.sym("theta_x")  # 角度x
-        theta_y = cs.SX.sym("theta_y")  # 角度y
-        theta_z = cs.SX.sym("theta_z")  # 角度z
+        x = cs.MX.sym("x")  # 位移x
+        y = cs.MX.sym("y")  # 位移y
+        z = cs.MX.sym("z")  # 位移z
+        theta_x = cs.MX.sym("theta_x")  # 角度x
+        theta_y = cs.MX.sym("theta_y")  # 角度y
+        theta_z = cs.MX.sym("theta_z")  # 角度z
         # 一阶量
-        v_x = cs.SX.sym("v_x")  # 平移速度x
-        v_y = cs.SX.sym("v_y")  # 平移速度y
-        v_z = cs.SX.sym("v_z")  # 平移速度z
-        omega_x = cs.SX.sym("omega_x")  # 角速度x
-        omega_y = cs.SX.sym("omega_y")  # 角速度y
-        omega_z = cs.SX.sym("omega_z")  # 角速度z
+        v_x = cs.MX.sym("v_x")  # 平移速度x
+        v_y = cs.MX.sym("v_y")  # 平移速度y
+        v_z = cs.MX.sym("v_z")  # 平移速度z
+        omega_x = cs.MX.sym("omega_x")  # 角速度x
+        omega_y = cs.MX.sym("omega_y")  # 角速度y
+        omega_z = cs.MX.sym("omega_z")  # 角速度z
         # 二阶量
         acc_x = F_x / m
         acc_y = F_y / m
@@ -86,8 +86,8 @@ class WaferStage:
         self._sym_x = state
         self._sym_u = params
 
-        A = cs.jacobian(rhs, self._sym_x)
-        B = cs.jacobian(rhs, self._sym_u)
+        A = cs.jacobian(rhs, self._sym_x) * self.time_step + np.eye(self._nx)
+        B = cs.jacobian(rhs, self._sym_u) * self.time_step
 
         self._jacobian= cs.Function('jacobian', [self._sym_x, self._sym_u], [A, B])
 
@@ -100,12 +100,20 @@ class WaferStage:
         return self._jacobian
 
     @property
-    def sym_x(self) -> cs.SX:
+    def sym_x(self) -> cs.MX:
         return self._sym_x
 
     @property
-    def sym_u(self) -> cs.SX:
+    def sym_u(self) -> cs.MX:
         return self._sym_u
+
+    @property
+    def nx(self) -> int:
+        return self._nx
+
+    @property
+    def nu(self) -> int:
+        return self._nu
 
 
 if __name__ == '__main__':
@@ -120,11 +128,11 @@ if __name__ == '__main__':
     for i in range(1000):
         sys_input = np.random.uniform(low=-1, high=1, size=6)
         result = dynamics(x0=state, p=sys_input)
-        # print(f"step: {i} system input: {sys_input} result: {result['xf']}")
-        # A, B = jacobian(state, sys_input)
-        # A = A.full().reshape(12, 12)
-        # B = B.full().reshape(12, 6)
-        # print(f"A: {A},\n B: {B}")
+        print(f"step: {i} system input: {sys_input} result: {result['xf']}")
+        A, B = jacobian(state, sys_input)
+        A = A.full().reshape(12, 12)
+        B = B.full().reshape(12, 6)
+        print(f"A: {A},\n B: {B}")
         state = result['xf']
     end_time = time.time()
     print(f"total time: {end_time - start_time}")

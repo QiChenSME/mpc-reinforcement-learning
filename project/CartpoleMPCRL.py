@@ -181,13 +181,13 @@ class NonLinearMpc(Mpc[cs.SX]):
         gammapowers = cs.DM(gamma ** np.arange(N)).T
         self.minimize(
             V0
-            + cs.bilin(S, x[:, -1])/N
+            + cs.bilin(S, x[:, -1])
             + cs.sum2(f.T @ cs.vertcat(x[:, :-1], u))
             + 0.5
             * cs.sum2(
                 gammapowers * (0
-                        + cs.sum1(Q @ x[:, :-1] * x[:, :-1])/N
-                        + 0.5 * cs.sum1(R @ u * u)/N
+                        + cs.sum1(Q @ x[:, :-1] * x[:, :-1])
+                        # + 0.5 * cs.sum1(R @ u * u)/N
                         + w.T @ s
                 )
             )
